@@ -36,11 +36,55 @@ export class QuestionGeneratorService {
     return map[level] || 'middle'
   }
 
-  /** 获取单词在指定级别的分级释义，若无则降级到 definitionZh */
+  /**
+   * 检测分级释义是否"脏" — 词库历史 import 把相邻词条串到了一起 (e.g. dress 后接 drink/drive)
+   * 检测规则 (只标记真污染, 正常词典格式如 "n. 1. xxx" 不算):
+   *   1. 含 [...] 音标 — 释义里不应该有音标
+   *   2. 含 /xxx/ 音标 — 同上
+   *   3. 头词污染 — 释义里出现 headword 自身 (短词 < 4 字符跳过, 防误伤 a/to/in)
+   *   4. 含多个英文单词 (英文拼音) — 真污染特征: "drink (drank, drunk)" 这种
+   *
+   * 不判为脏 (false positive 避免):
+   *   - "n. 1. xxx 2. yyy" 多义项编号
+   *   - "|| 短语归纳" (e.g. "at full tilt")
+   *   - 长词典释义 (很多正常释义 > 80 字符, 不应该单靠长度判)
+   *   - "adj. n. v." 词性在前 (释义是形容词/名词/动词本身就含词性标签)
+   */
+  private isDirtyGradeDefinition(value: string, headword: string): boolean {
+    if (!value || !value.trim()) return false
+    const v = value.trim()
+    // 0. 白名单: 正常词典格式 (多义项编号 || 短语归纳) — 不算脏
+    // 例: "1. 支柱 2. 一双 || at full tilt" "n. 1. xxx 2. yyy"
+    if (/\|\|/.test(v)) return false
+    if (/\d+\.\s/.test(v)) return false
+    // 1. 音标污染 [...]
+    if (/\[[a-zA-Zʃʒθðŋɪʊəɒæɛɔʌːə̯ɹɾθɡʔˈˌː.,\s\-]+\]/.test(v)) return true
+    // 2. 音标污染 /.../
+    if (/\/[a-zA-Zʃʒθðŋɪʊəɒæɛɔʌːə̯ɹɾθɡʔˈˌː.,\s\-]+\//.test(v)) return true
+    // 3. 头词污染 (长 headword)
+    if (headword && headword.length >= 4) {
+      const re = new RegExp(`\\b${headword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      if (re.test(v)) return true
+    }
+    // 4. 含 2+ 连续英文单词 (拼音串污染)
+    // 例: "drink (drank, drunk)" "stand stood stood" "television=TV"
+    const englishWordRun = /[a-zA-Z]{3,}(\s+[a-zA-Z',.]{2,}){2,}/
+    if (englishWordRun.test(v)) return true
+    return false
+  }
+
+  /**
+   * 获取单词在指定级别的分级释义
+   * 三级 fallback: grade_definitions[key] → definitionZh
+   * 脏字段自动跳过(2026-06-09: 词库历史 import 把相邻词条串到一起)
+   */
   private getGradeDefinition(word: VocabWordDocument, level: string): string {
     const key = this.levelToKey(level)
     const gradeDef = word.definitions?.[key]
-    return gradeDef && gradeDef.trim() ? gradeDef : (word.definitionZh || '')
+    if (gradeDef && gradeDef.trim() && !this.isDirtyGradeDefinition(gradeDef, word.headword)) {
+      return gradeDef
+    }
+    return word.definitionZh || ''
   }
 
   async generateChoiceQuestion(word: VocabWordDocument, mode: 'en-zh' | 'zh-en'): Promise<QuestionPayload> {
