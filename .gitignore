@@ -36,3 +36,16 @@ docker_volumes/
 *.tmp
 .cache/
 data/raw/
+
+# IDE session 缓存(都是 IDE 自己的依赖,不该进 git)
+.opencode/
+.trae/
+
+# 历史 prisma SQLite(早期用过,已迁到 mongo)
+backend/prisma/
+
+# mongo bson 数据快照(1.9M,不是代码)
+linguacraft_dump/
+
+# enrich 脚本的 API 缓存(下次跑会重生,推上去没用)
+data/processed/*_cache.json

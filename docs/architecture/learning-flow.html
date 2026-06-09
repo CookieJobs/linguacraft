@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>linguacraft · 学习流程图</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f5f0;
+      --card: #ffffff;
+      --line: #e9e3d6;
+      --line-soft: #f0eadc;
+      --text: #14171e;
+      --muted: #7c7a72;
+      --primary: #2f6f5e;
+      --warm: #c97b3f;
+      --rose: #b06367;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; }
+    html, body { background: var(--bg); color: var(--text); }
+    body { font-family: 'Outfit', system-ui, -apple-system, sans-serif; font-feature-settings: "ss01", "cv11"; -webkit-font-smoothing: antialiased; }
+    .font-serif { font-family: 'DM Serif Display', serif; font-weight: 400; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .container-x { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    @media (min-width: 768px) { .container-x { padding: 0 32px; } }
+    .h-display { font-family: 'DM Serif Display', serif; font-weight: 400; letter-spacing: -0.012em; line-height: 1.05; }
+    .tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .tag-primary { background: rgba(47,111,94,0.08); color: var(--primary); border: 1px solid rgba(47,111,94,0.20); }
+    .tag-warm { background: rgba(201,123,63,0.10); color: var(--warm); border: 1px solid rgba(201,123,63,0.22); }
+    .tag-rose { background: rgba(176,99,103,0.10); color: var(--rose); border: 1px solid rgba(176,99,103,0.22); }
+    .tag-green { background: rgba(91,140,111,0.10); color: var(--primary); border: 1px solid rgba(91,140,111,0.22); }
+    .tag-blue { background: rgba(59,130,246,0.08); color: var(--blue); border: 1px solid rgba(59,130,246,0.22); }
+    .tag-mono { background: rgba(20,23,30,0.05); color: var(--muted); border: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; text-transform: none; letter-spacing: 0; }
+    .surface { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 2px 8px -4px rgba(20,23,30,0.04); }
+    .step-num { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: 50%; background: var(--primary); color: white; font-family: 'DM Serif Display', serif; font-size: 16px; flex-shrink: 0; }
+    .mermaid { background: transparent; }
+    .mermaid svg { max-width: 100%; height: auto !important; }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: var(--line-soft); padding: 1px 6px; border-radius: 4px; color: var(--text); }
+    .dot-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .dot-legend::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+    .legend-green::before { background: #2f6f5e; }
+    .legend-warm::before { background: #c97b3f; }
+    .legend-rose::before { background: #b06367; }
+    .legend-blue::before { background: #3b82f6; }
+    .legend-gray::before { background: #7c7a72; }
+
+    /* 阶段流程 (自然语言卡片) */
+    .stage-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px 18px 18px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stage-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px -8px rgba(20,23,30,0.10); }
+    .stage-card.highlight {
+      border-color: rgba(176,99,103,0.5);
+      background: linear-gradient(180deg, #fff8f6 0%, #ffffff 65%);
+      box-shadow: 0 4px 14px -8px rgba(176,99,103,0.30);
+    }
+    .stage-circle {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Serif Display', serif;
+      font-size: 17px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 6px rgba(47,111,94,0.22);
+    }
+    .stage-card.highlight .stage-circle { background: var(--rose); box-shadow: 0 2px 8px rgba(176,99,103,0.30); }
+    .stage-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .stage-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 10px; line-height: 1.3; }
+    .stage-desc { font-size: 13.5px; line-height: 1.7; color: #3a4256; margin-bottom: 14px; flex-grow: 1; }
+    .stage-detail { font-size: 11.5px; color: var(--primary); font-weight: 500; padding-top: 10px; border-top: 1px dashed var(--line); letter-spacing: 0.01em; }
+    .stage-card.highlight .stage-detail { color: var(--rose); }
+    .arrow-between { display: flex; align-items: center; justify-content: center; color: #b8b2a3; flex-shrink: 0; }
+    .arrow-between svg { stroke: currentColor; }
+    .loop-back { margin-top: 24px; padding: 18px 22px; background: rgba(176,99,103,0.04); border: 1px dashed rgba(176,99,103,0.45); border-radius: 14px; display: flex; align-items: flex-start; gap: 14px; font-size: 13.5px; color: #3a4256; line-height: 1.65; }
+    .loop-back svg { color: var(--rose); flex-shrink: 0; margin-top: 2px; }
+    .kpi { display: flex; align-items: baseline; gap: 6px; }
+    .kpi .num { font-family: 'DM Serif Display', serif; font-size: 28px; line-height: 1; color: var(--primary); }
+    .kpi .unit { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <header class="container-x pt-12 md:pt-20 pb-10">
+    <div class="flex flex-wrap items-center gap-2 mb-6">
+      <span class="tag tag-primary">Product Flow</span>
+      <span class="tag tag-warm">学习机制</span>
+      <span class="tag tag-mono">commit d43f2b4</span>
+    </div>
+    <h1 class="h-display text-4xl md:text-5xl mb-5">linguacraft<br>学习流程图</h1>
+    <p class="text-base md:text-lg text-[#3a4256] max-w-2xl leading-relaxed">
+      从登录到完成一节 10 题学习的全路径,以及背后的 SRS 调度、题型选择、奖励发放和数据模型。
+      基于 <code>main</code> 分支当前代码还原。
+    </p>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-10">
+      <div class="surface px-5 py-4">
+        <div class="kpi"><span class="num">10</span><span class="unit">题 / session</span></div>
+        <div class="text-xs text-[var(--muted)] mt-1">4 旧 + 6 新</div>
+      </div>
+      <div class="surface px-5 py-4">
+        <div class="kpi"><span class="num">4</span><span class="unit">个 stage</span></div>
+        <div class="text-xs text-[var(--muted)] mt-1">0 = new → 3 = mastered</div>
+      </div>
+      <div class="surface px-5 py-4">
+        <div class="kpi"><span class="num">7</span><span class="unit">天最远复习</span></div>
+        <div class="text-xs text-[var(--muted)] mt-1">stage 3 答对后</div>
+      </div>
+      <div class="surface px-5 py-4">
+        <div class="kpi"><span class="num">7</span><span class="unit">个 level</span></div>
+        <div class="text-xs text-[var(--muted)] mt-1">小学 → 雅思托福</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-x space-y-20 pb-24">
+
+    <!-- 1. 总览图 -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">1</span>
+        <h2 class="h-display text-2xl md:text-3xl">总览:一次完整学习</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-2xl leading-relaxed">
+        用户视角的主流程。绿色 = 用户主动路径,琥珀 = 后端规则,玫红 = 掌握节点,蓝色 = AI 介入。
+      </p>
+      <div class="surface p-4 md:p-6 overflow-x-auto">
+        <pre class="mermaid" id="diagram-overview">
+flowchart LR
+  classDef user fill:#e8efe8,stroke:#2f6f5e,stroke-width:1.5px,color:#14171e
+  classDef api fill:#fff5e8,stroke:#c97b3f,stroke-width:1.5px,color:#14171e
+  classDef ai fill:#e8eef8,stroke:#3b82f6,stroke-width:1.5px,color:#14171e
+  classDef mastered fill:#f5e8eb,stroke:#b06367,stroke-width:1.5px,color:#14171e
+
+  Login["登录 / 选 level + textbook"]:::user
+  Start(["开始 Session"]):::user
+  API["GET /api/learning/session"]:::api
+  Ready["10 题 = 4 旧 + 6 新"]:::api
+  Loop{"循环 10 题"}:::user
+  Q{"题目 type"}:::user
+  CQ["choice / quiz<br>前端比对"]:::user
+  SQ["sentence<br>造句"]:::user
+  AI["DeepSeek<br>evaluateSentence"]:::ai
+  Judge{"答对?"}:::user
+  Submit["submitAnswer"]:::api
+  Skip["跳过<br>不调 submit"]:::api
+  Update["stage / 奖励 / 间隔"]:::api
+  Master["升 stage 3<br>写 WordMastery + checkin"]:::mastered
+  Next{"10 题做完?"}:::user
+  Sum(["SessionSummary"]):::user
+  Home(["回首页"]):::user
+
+  Login --> Start --> API --> Ready --> Loop
+  Loop --> Q
+  Q -- "choice / quiz" --> CQ
+  Q -- "sentence" --> SQ --> AI
+  CQ --> Judge
+  AI --> Judge
+  Judge -- "对" --> Submit --> Update
+  Update -- "升 3" --> Master --> Next
+  Update -- "未升 3" --> Next
+  Judge -- "错" --> Skip --> Next
+  Next -- "否" --> Loop
+  Next -- "是" --> Sum --> Home
+        </pre>
+      </div>
+      <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
+        <span class="dot-legend legend-green">用户主动路径</span>
+        <span class="dot-legend legend-warm">后端规则</span>
+        <span class="dot-legend legend-rose">掌握节点</span>
+        <span class="dot-legend legend-blue">AI 介入</span>
+      </div>
+    </section>
+
+    <!-- 2. Session 构造 -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">2</span>
+        <h2 class="h-display text-2xl md:text-3xl">一次 Session = 4 旧 + 6 新</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-2xl leading-relaxed">
+        <code>GET /api/learning/session</code> 服务端组装 10 题的逻辑。旧词按 SRS 调度回收,
+        新词按 CEFR 等级权重 + 词频 + 排除已学来抽。
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="surface p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="tag tag-warm">4 旧词</span>
+            <span class="tag-mono tag">getDueWords(4)</span>
+          </div>
+          <p class="text-sm text-[#3a4256] leading-relaxed mb-3">
+            从 <code>UserWordProgress</code> 找 <code>nextReviewAt ≤ now</code> 的记录,
+            按时间升序取前 4。越久没复习越先出。
+          </p>
+          <pre class="text-xs">// learning-scheduler.service.ts:27
+userWordProgressModel.find({
+  userId, nextReviewAt: { $lte: now }
+}).sort({ nextReviewAt: 1 }).limit(limit)</pre>
+        </div>
+        <div class="surface p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="tag tag-primary">6 新词</span>
+            <span class="tag-mono tag">vocab.pickWords(6)</span>
+          </div>
+          <p class="text-sm text-[#3a4256] leading-relaxed mb-3">
+            从 <code>VocabWord</code> 排除已学过的 lemma,
+            按 level 对应的 CEFR 权重 + <code>1/freqRank</code> 打分随机抽。
+            同 textbook 时优先用 <code>contextualDefinitions</code>。
+          </p>
+          <pre class="text-xs">// vocab.service.ts:52
+score = WEIGHTS[level][cefr] + (1/freqRank) × 0.1</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 题型分配 -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">3</span>
+        <h2 class="h-display text-2xl md:text-3xl">Stage → 题型映射</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-2xl leading-relaxed">
+        同一单词在不同学习阶段,会被出成不同难度的题。Stage 越深,题越需要主动回忆,
+        干扰项越接近同 level。
+      </p>
+      <div class="surface overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[var(--muted)] border-b border-[var(--line)] bg-[#fafafa]">
+              <th class="py-3 px-5 font-semibold">来源</th>
+              <th class="py-3 px-5 font-semibold">Stage</th>
+              <th class="py-3 px-5 font-semibold">题型</th>
+              <th class="py-3 px-5 font-semibold">实现</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--line-soft)]">
+            <tr>
+              <td class="py-3 px-5">旧词</td>
+              <td class="py-3 px-5"><span class="tag-mono tag">0 / 1</span></td>
+              <td class="py-3 px-5">choice (四选一)</td>
+              <td class="py-3 px-5 text-[var(--muted)]">en ↔ zh 随机方向,前端比对 <code>isCorrect</code></td>
+            </tr>
+            <tr>
+              <td class="py-3 px-5">旧词</td>
+              <td class="py-3 px-5"><span class="tag-warm tag">2</span></td>
+              <td class="py-3 px-5">quiz (例句挖空)</td>
+              <td class="py-3 px-5 text-[var(--muted)]">用 <code>exampleEn</code> 把 headword 挖空 + 同 level 干扰项</td>
+            </tr>
+            <tr>
+              <td class="py-3 px-5">旧词</td>
+              <td class="py-3 px-5"><span class="tag-rose tag">3</span></td>
+              <td class="py-3 px-5">quiz (sentence 降级)</td>
+              <td class="py-3 px-5 text-[var(--muted)]">⚠️ sentence 生成器未实装,临时复用 quiz</td>
+            </tr>
+            <tr>
+              <td class="py-3 px-5">新词</td>
+              <td class="py-3 px-5 text-[var(--muted)]">—</td>
+              <td class="py-3 px-5">choice (四选一)</td>
+              <td class="py-3 px-5 text-[var(--muted)]">同 stage 0-1,en ↔ zh 随机</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. 答题循环 + SRS -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">4</span>
+        <h2 class="h-display text-2xl md:text-3xl">答题循环 & SRS 状态机</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-2xl leading-relaxed">
+        每答一题,后端 <code>submitAnswer</code> 更新 SRS 状态、发放奖励。
+        Stage 升到 3 是「掌握」节点,会触发 WordMastery 写入 + 额外奖励 + 打卡。
+      </p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold text-[var(--muted)] mb-3 uppercase tracking-wider">submitAnswer 流程</h3>
+          <pre class="mermaid" id="diagram-submit">
+flowchart TD
+  classDef ok fill:#e8efe8,stroke:#2f6f5e,stroke-width:1.2px,color:#14171e
+  classDef err fill:#f5e8eb,stroke:#b06367,stroke-width:1.2px,color:#14171e
+  classDef api fill:#fff5e8,stroke:#c97b3f,stroke-width:1.2px,color:#14171e
+  classDef bonus fill:#fde8d4,stroke:#c97b3f,stroke-width:1.5px,color:#14171e
+
+  S["submitAnswer wordId, isCorrect, userSentence?"]:::api
+  Load["加载 / 创建 UserWordProgress"]:::api
+  Cnt["exposureCount + 1"]:::api
+
+  S --> Load --> Cnt
+  Cnt --> J{"isCorrect?"}
+
+  J -- "对" --> R1["+1 金币 / +1 exp / +2 能量"]:::ok
+  R1 --> Stg{"stage < 3 &&<br/>consecutive ≥ 1?"}
+  Stg -- "是" --> Up["stage += 1"]:::ok
+  Stg -- "否" --> NoUp["stage 不变"]:::ok
+  Up --> M{"升到 3?"}
+  NoUp --> M
+  M -- "是" --> B["+10 金币 / +10 exp<br/>+ 写 WordMastery<br/>+ stats.checkin"]:::bonus
+  M -- "否" --> Gap["设置 nextReviewAt<br/>按 stage 间隔"]:::api
+  B --> End(["save"]):::api
+  Gap --> End
+
+  J -- "错" --> W["wrongStreak += 1"]:::err
+  W --> WS{"wrongStreak ≥ 2?"}
+  WS -- "是" --> Down["stage = max(0, stage-1)<br/>wrongStreak = 0"]:::err
+  WS -- "否" --> Keep["stage 不动"]:::err
+  Down --> Now["nextReviewAt = now<br/>(立即复习)"]:::err
+  Keep --> Now
+  Now --> End
+          </pre>
+        </div>
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold text-[var(--muted)] mb-3 uppercase tracking-wider">Stage 转换</h3>
+          <pre class="mermaid" id="diagram-stage">
+flowchart LR
+  classDef s0 fill:#ffffff,stroke:#7c7a72,stroke-width:1.5px,color:#14171e
+  classDef s1 fill:#f0eadc,stroke:#c97b3f,stroke-width:1.5px,color:#14171e
+  classDef s2 fill:#dfeae5,stroke:#2f6f5e,stroke-width:1.5px,color:#14171e
+  classDef s3 fill:#f5e0e3,stroke:#b06367,stroke-width:2px,color:#14171e
+  classDef bonus fill:#fde8d4,stroke:#c97b3f,stroke-width:1.5px,color:#14171e
+  classDef ghost fill:none,stroke:none,color:#7c7a72
+
+  S0["Stage 0<br/>新词"]:::s0
+  S1["Stage 1<br/>接触"]:::s1
+  S2["Stage 2<br/>巩固"]:::s2
+  S3["Stage 3<br/>已掌握"]:::s3
+  Out["写 WordMastery<br/>+10 金币 +10 exp<br/>+ checkin"]:::bonus
+
+  S0 -- "答对" --> S1
+  S1 -- "答对" --> S2
+  S2 -- "答对" --> S3
+  S3 -- "答对" --> S3
+  S3 -. "升 3 时刻" .-> Out
+
+  S1 -. "连错 2 次" .-> S0
+  S2 -. "连错 2 次" .-> S1
+  S3 -. "连错 2 次" .-> S2
+          </pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 数据模型 -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">5</span>
+        <h2 class="h-display text-2xl md:text-3xl">数据模型</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-2xl leading-relaxed">
+        4 个核心 collection,围绕用户和词的关系。VocabWord 是静态词库,
+        UserWordProgress 是学习中状态,WordMastery 是已掌握记录,
+        UserStats + DailyActivity 是打卡统计。
+      </p>
+      <div class="surface p-5">
+        <pre class="mermaid" id="diagram-erd">
+erDiagram
+  USER ||--o{ USER_WORD_PROGRESS : "has"
+  USER ||--o{ WORD_MASTERY : "mastered"
+  USER ||--o| USER_STATS : "stats"
+  USER ||--o{ DAILY_ACTIVITY : "active days"
+  USER ||--o| PET : "owns"
+  USER ||--o| WALLET : "owns"
+  VOCAB_WORD ||--o{ USER_WORD_PROGRESS : "referenced by"
+  VOCAB_WORD ||--o{ WORD_MASTERY : "referenced by"
+
+  VOCAB_WORD {
+    string headword
+    string lemma
+    string pos
+    string cefr "A1-C2"
+    string definitionEn
+    string definitionZh
+    string exampleEn
+    string[] levels
+    string[] textbooks
+  }
+  USER_WORD_PROGRESS {
+    ObjectId userId
+    ObjectId wordId
+    int stage "0-3"
+    int exposureCount
+    int correctCount
+    int wrongCount
+    int consecutiveCorrect
+    int wrongStreak
+    date nextReviewAt
+  }
+  WORD_MASTERY {
+    string word
+    string definition
+    string userSentence
+    date masteredAt
+    string sourceLevel
+  }
+  USER_STATS {
+    int currentStreak
+    int longestStreak
+    date lastActivityDate
+  }
+  DAILY_ACTIVITY {
+    date date "UTC day"
+  }
+        </pre>
+      </div>
+    </section>
+
+    <!-- 6. 关键参数 -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">6</span>
+        <h2 class="h-display text-2xl md:text-3xl">关键参数速查</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+            <span class="tag tag-primary">间隔</span> SRS 复习间隔
+          </h3>
+          <dl class="text-sm space-y-2">
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">Stage 0 → 1</dt><dd class="font-mono">1 day</dd></div>
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">Stage 1 → 2</dt><dd class="font-mono">1 day</dd></div>
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">Stage 2 → 3</dt><dd class="font-mono">3 day</dd></div>
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">Stage 3 → 3+</dt><dd class="font-mono">7 day</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)]">答错</dt><dd class="font-mono">立即 (now)</dd></div>
+          </dl>
+        </div>
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+            <span class="tag tag-warm">奖励</span> 答对/掌握
+          </h3>
+          <dl class="text-sm space-y-2">
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">答对 1 题</dt><dd class="font-mono">+1 金币 / +1 exp / +2 能量</dd></div>
+            <div class="flex justify-between border-b border-dashed border-[var(--line)] pb-1.5"><dt class="text-[var(--muted)]">升 Stage 3</dt><dd class="font-mono">+10 金币 / +10 exp</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)]">掌握节点</dt><dd class="font-mono">写 WordMastery + stats.checkin</dd></div>
+          </dl>
+        </div>
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+            <span class="tag tag-rose">权重</span> CEFR × Level
+          </h3>
+          <dl class="text-sm space-y-1.5 font-mono">
+            <div class="flex justify-between"><dt class="text-[var(--muted)] font-sans">Primary</dt><dd>A1·0.7&nbsp;&nbsp;A2·0.3</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)] font-sans">Middle</dt><dd>A1·0.1&nbsp;&nbsp;A2·0.5&nbsp;&nbsp;B1·0.4</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)] font-sans">High</dt><dd>A2·0.1&nbsp;&nbsp;B1·0.6&nbsp;&nbsp;B2·0.3</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)] font-sans">CET4</dt><dd>B1·0.2&nbsp;&nbsp;B2·0.5&nbsp;&nbsp;C1·0.3</dd></div>
+            <div class="flex justify-between"><dt class="text-[var(--muted)] font-sans">CET6</dt><dd>B2·0.2&nbsp;&nbsp;C1·0.6&nbsp;&nbsp;C2·0.2</dd></div>
+          </dl>
+        </div>
+        <div class="surface p-5">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+            <span class="tag tag-blue">AI</span> DeepSeek 兜底
+          </h3>
+          <p class="text-sm text-[#3a4256] leading-relaxed">
+            <code>evaluateSentence</code> 无 API key 时降级为 <code>sentence.includes(word)</code> 子串检查。
+            <code>generateStory</code> 无 key 时返回占位模板。两处都有 try/catch fallback。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. 已知风险 / TODO -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">7</span>
+        <h2 class="h-display text-2xl md:text-3xl">已知风险 / TODO</h2>
+      </div>
+      <p class="text-xs text-[var(--muted)] mb-4">最后更新: 2026-06-08 · <b style="color:var(--primary);">12 项已修 (A 全清 + B.1/B.2/B.3/B.4 完成)</b>,1 项待评审</p>
+      <ul class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-[#3a4256]">
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><code>learning-scheduler.service.ts</code> 末尾 <code>updateProgress</code> 死代码已删除,主流程走 <code>submitAnswer</code>,无外部引用</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><code>levelToKey</code> 已补 <code>University → cet4</code>、<code>Professional → cet6</code> 兜底映射,不再静默降级</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span>答错也调 <code>submitAnswer(false)</code> (新 <code>handleQuestionFailure</code>),SRS 的 <code>wrongStreak/stage</code> 降级开始跑数据</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>反作弊</b>:<code>submitAnswer</code> 不再信前端 <code>isCorrect</code>,自己用 <code>selectedOptionId === wordId</code> 判分;sentence 走 <code>evaluateSentence</code></span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>streak 时区</b>: 删前端 <code>localStorage</code> 算 streak 的逻辑,只读后端 <code>getStats</code> 拿 UTC 权威值;logout 兼容清老数据</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>SM-2 升级</b>:<code>UserWordProgress</code> 加 <code>easeFactor/interval/repetitions</code>;scheduler 按 SM-2 公式算下次复习时间(实测 1d→6d→16d→45d 指数增长),EF 1.3–2.8 区间</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>rate limit</b>:<code>RateLimitGuard</code> + <code>@RateLimit</code> 装饰器,Redis 滑动窗口,关键接口全装饰:login 8/min、send-code 10/h、session 60/h、submit 30/min、evaluate 10/min;429 + retryAfter</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>日志脱敏</b>:<code>redact.ts</code> 工具覆盖对象字段 + 字符串内嵌(email/Bearer/password=xxx/token=xxx/secret=xxx 模式);9 处 <code>console.error</code> 全走 <code>safeError(e)</code> 防泄露</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>SMTP 邮件实配</b>:腾讯邮箱 <code>smtp.qq.com:587</code> 接入,验证码走真实邮件通道,降级到 console.log 的 dev 路径不再触发</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>错题本 B.2</b>:<code>GET /api/learning/wrong-words</code> 拉列表,<code>POST /api/learning/wrong-words/practice</code> 拉 5 道错题做 quick session;前端 <code>/wrong-words</code> 路由 + Header Target 入口;判定 <code>wrongCount > 0 && stage < 3</code> 自动进出</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>sentence 题实装 B.3</b>:<code>question-generator.generateSentenceQuestion</code> + <code>QuestionPayload.type</code> 加 <code>sentence</code>;Stage 3 旧词出 sentence 题(已掌握走深度运用),DeepSeek 评估,答对写 WordMastery</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start" style="border-left: 3px solid #5b8c6f;">
+          <span class="tag tag-green shrink-0">已修</span>
+          <span><b>词库审计 B.4</b>:<code>audit-vocab.ts</code> 替代占位 <code>validate-vocab.ts</code>;报告 6363 词 99% 缺英文释义/例句/IPA/音频,74% CEFR 是 UNKNOWN,Primary 537 词质量最差;新增 <code>enrich-primary-vocab.ts</code> 用 DeepSeek 补全,实测 30 词后真实例句 0% → 6.1%</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start">
+          <span class="tag tag-rose shrink-0">未实装</span>
+          <span>Stage 3 的 <code>sentence</code> 生成器,降级复用 quiz (controller 注释「待实现」)</span>
+        </li>
+        <li class="surface p-4 flex gap-3 items-start">
+          <span class="tag tag-warm shrink-0">3-2 拆题</span>
+          <span><code>normalize</code> 在 <code>learning.controller.ts</code> 重复 3 次,<code>isDummyExample</code> 重复 3 次 — 顺手优化,目前不影响功能</span>
+        </li>
+          <span class="tag tag-warm shrink-0">3-2 拆题</span>
+          <span><code>normalize</code> 在 <code>learning.controller.ts</code> 重复 3 次,<code>isDummyExample</code> 重复 3 次 — 提到 util 是顺手优化,目前不影响功能</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- 8. 一个新词的生命周期 (自然语言节点) -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">8</span>
+        <h2 class="h-display text-2xl md:text-3xl">一个新词的生命周期</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-8 max-w-2xl leading-relaxed">
+        跟随一个具体的单词走完它从「沉睡在词库」到「长进英语墙」的完整故事。
+        这一节不用流程图符号,每个节点直接用一段话讲清楚这一阶段到底发生了什么。
+      </p>
+
+      <div class="flex flex-col md:flex-row md:items-stretch gap-3 md:gap-2">
+
+        <article class="flex-1 stage-card">
+          <div class="stage-circle">1</div>
+          <div class="stage-label">vocab.schema</div>
+          <h3 class="stage-title">沉睡在词库</h3>
+          <p class="stage-desc">
+            这个单词安静地躺在 <code>VocabWord</code> 集合里,被打上 headword、lemma、CEFR 等级和所属教材的标签。
+            它此刻跟任何用户都没有关系,只是一个等待被算法挑中的数据点——一次 seed 启动时,
+            它从 elementary_vocabulary.json 被批量写进 MongoDB,从此再没动过。
+          </p>
+          <div class="stage-detail">cefr=A1 · levels=[Primary]</div>
+        </article>
+
+        <div class="arrow-between hidden md:flex">
+          <svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12h21M18 6l6 6-6 6"/>
+          </svg>
+        </div>
+
+        <article class="flex-1 stage-card">
+          <div class="stage-circle">2</div>
+          <div class="stage-label">Stage 0 → 1</div>
+          <h3 class="stage-title">首次相遇</h3>
+          <p class="stage-desc">
+            用户进入一个学习 session,后端按他选择的 level(比如 Primary)对应的 CEFR 权重表,给这个词打了一个分数,
+            随机抽中后塞进「6 道新词」里。用户在一道四选一中第一次见到它,
+            要从干扰项里识别出它的中文释义(或反过来)。答对,后端把 stage 从 0 提到 1,并发一份小奖励。
+          </p>
+          <div class="stage-detail">choice: en ↔ zh · +1 金币 +1 exp</div>
+        </article>
+
+        <div class="arrow-between hidden md:flex">
+          <svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12h21M18 6l6 6-6 6"/>
+          </svg>
+        </div>
+
+        <article class="flex-1 stage-card">
+          <div class="stage-circle">3</div>
+          <div class="stage-label">Stage 1 → 2</div>
+          <h3 class="stage-title">复习闹钟响起</h3>
+          <p class="stage-desc">
+            1 天后,后端 <code>scheduler.getDueWords</code> 把它从「到期」队列里捞回来,重新出现在下次 session 的「4 道旧词」里。
+            题面不再是新的了——但题型没变,还是 choice。这一关是真正的考验:用户是真记住了,还是上轮蒙的?
+            答对就升 stage 2,进入更长的复习间隔;如果连错 2 次,stage 会退回 0,整个故事要从头来。
+          </p>
+          <div class="stage-detail">+1 day 间隔 · 可回退</div>
+        </article>
+
+        <div class="arrow-between hidden md:flex">
+          <svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12h21M18 6l6 6-6 6"/>
+          </svg>
+        </div>
+
+        <article class="flex-1 stage-card">
+          <div class="stage-circle">4</div>
+          <div class="stage-label">Stage 2</div>
+          <h3 class="stage-title">题型升级</h3>
+          <p class="stage-desc">
+            又过 3 天,这个词又回来了,但这次题型变了:不再是 4 选 1,而是用它自己的英文例句挖一个空,
+            让用户主动写出正确答案。这是关键的跨越——从「我认得它」到「我能想起它」,从识别记忆跨进认知记忆。
+            例句是系统已经写好的,如果词库里没有真例句,会降级成 choice 题,这条升级路径就不会生效。
+          </p>
+          <div class="stage-detail">quiz: 例句挖空 · +3 day</div>
+        </article>
+
+        <div class="arrow-between hidden md:flex">
+          <svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12h21M18 6l6 6-6 6"/>
+          </svg>
+        </div>
+
+        <article class="flex-1 stage-card highlight">
+          <div class="stage-circle">5</div>
+          <div class="stage-label">Stage 2 → 3</div>
+          <h3 class="stage-title">掌握时刻</h3>
+          <p class="stage-desc">
+            这一次,用户答对了。后端把 stage 从 2 升到 3——这是整个生命周期里最重要的一刻:
+            一条 <code>WordMastery</code> 记录被写入,记下用户造的例句、掌握时间和来源 level;
+            钱包入账 10 金币,宠物加 10 经验,同时 <code>stats.checkin</code> 记录今日打卡。
+            从此这个词从「学习中」毕业,正式长进了英语墙,出现在 ReviewPage 的「已掌握」列表里。
+          </p>
+          <div class="stage-detail">+10 金币 · WordMastery · checkin</div>
+        </article>
+
+      </div>
+
+      <div class="loop-back">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>
+        </svg>
+        <div>
+          <strong class="text-[var(--rose)]">7 天长复习循环:</strong>
+          掌握后的单词会安静 7 天,直到 <code>nextReviewAt</code> 再次到期。
+          如果这期间答错,会降回 stage 2 重新进入巩固循环(对应虚线箭头),直到稳定在 stage 3 至少 2-3 轮才算真的「内化」。
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. 上线前 Checklist (2026-06-08 总结) -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="step-num">9</span>
+        <h2 class="h-display text-2xl md:text-3xl">上线前 Checklist</h2>
+      </div>
+      <p class="text-sm md:text-base text-[#3a4256] mb-6 max-w-3xl leading-relaxed">
+        距离给真实用户用,产品还有 4 个维度的硬骨头。按依赖关系排序 — 上面没解决的,下面全跑不动。
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- A. 必做 / 阻塞上线 -->
+        <div class="surface p-5" style="border-top: 3px solid var(--rose);">
+          <h3 class="text-base font-bold text-[var(--rose)] mb-3 flex items-center gap-2">
+            <span class="tag tag-rose">A</span> 必做 · 阻塞上线
+          </h3>
+          <ul class="text-sm space-y-2 text-[#3a4256]">
+            <li class="flex gap-2"><span class="text-[var(--rose)] font-bold shrink-0">·</span><span><b>服务端反作弊</b> — <code>submitAnswer</code> 必须服务端再判一遍 choice/quiz(对比 <code>wordId</code> + 正确选项 ID),前端 <code>isCorrect</code> 仅作 UX 用。当前实现直接信任前端,有人改本地就能刷金币/掌握数。</span></li>
+            <li class="flex gap-2"><span class="text-[var(--rose)] font-bold shrink-0">·</span><span><b>streak 时区</b> — 选一个权威源(建议后端 UTC),前端彻底从 localStorage 删掉,只展示 <code>getStats().currentStreak</code>。</span></li>
+            <li class="flex gap-2"><span class="text-[var(--rose)] font-bold shrink-0">·</span><span><b>rate limit</b> — 至少 <code>/api/learning/session</code>、<code>/api/learning/submit</code>、<code>/api/learning/evaluate</code> 加 IP+userId 限流,DeepSeek 调用尤其防刷。</span></li>
+            <li class="flex gap-2"><span class="text-[var(--rose)] font-bold shrink-0">·</span><span><b>邮件配置</b> — 邮件验证码、找回密码目前是 SMTP 占位,生产必须实配且加 SPF/DKIM,否则进垃圾箱。</span></li>
+            <li class="flex gap-2"><span class="text-[var(--rose)] font-bold shrink-0">·</span><span><b>数据脱敏与日志</b> — 错误日志不打印 email/token/密码,接 Sentry 类工具,生产禁用 <code>console.log</code>。</span></li>
+          </ul>
+        </div>
+
+        <!-- B. 重要但可延后 -->
+        <div class="surface p-5" style="border-top: 3px solid var(--warm);">
+          <h3 class="text-base font-bold mb-3 flex items-center gap-2" style="color: var(--warm);">
+            <span class="tag tag-warm">B</span> 重要 · 可延 1-2 周
+          </h3>
+          <ul class="text-sm space-y-2 text-[#3a4256]">
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--warm);">·</span><span><b>SRS 升级 SM-2</b> — 写死的 1/1/3/7 天换成 SM-2 公式(<code>EF</code>、<code>interval</code>、<code>repetitions</code> 三参数),按答题质量/反应时调间隔。预期提升 30-50% 长期保持率。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--warm);">·</span><span><b>错题本</b> — 既然答错已上报,在 <code>UserWordProgress</code> 加 <code>lastWrongAt / wrongTotal</code> 索引,前端做「错题重练」入口(可按学段/教材筛选)。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--warm);">·</span><span><b>sentence 题实装</b> — Stage 3 真做造句题(用 <code>evaluateSentence</code> 路径),解锁「真掌握」路径,给用户学习曲线一个明显爬升信号。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--warm);">·</span><span><b>词库质量审计</b> — 跑 <code>scripts/validate-vocab.ts</code> 走一遍,看 <code>isDummyExample</code> 占比、CEFR 分布、缺义词的词条。小学词用户最多,这一档必须先过。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--warm);">·</span><span><b>回归测试</b> — 后端加 jest e2e(关键:<code>submitAnswer</code> 升 stage/掌握奖励/打卡),前端 jsdom 环境先修一下再跑现有 vitest。</span></li>
+          </ul>
+        </div>
+
+        <!-- C. 法务合规 -->
+        <div class="surface p-5" style="border-top: 3px solid var(--blue);">
+          <h3 class="text-base font-bold mb-3 flex items-center gap-2" style="color: var(--blue);">
+            <span class="tag tag-blue">C</span> 法务 · 商业合规
+          </h3>
+          <ul class="text-sm space-y-2 text-[#3a4256]">
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--blue);">·</span><span><b>隐私政策 + 用户协议</b> — 必须上线前发布,挂在 <code>/privacy</code>、<code>/terms</code>,用户注册时勾选同意。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--blue);">·</span><span><b>未成年人合规</b> — 主力用户是中小学生,需要 COPPA / 中国《未成年人保护法》双适配:注册年龄≥13(中国实际看情况,建议 12+),家长控制选项,数据可导出/删除。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--blue);">·</span><span><b>词库来源</b> — 教材是出版社/学校机构内容,如果直接抄人教版/北师大版词表,会有版权风险;建议走正规授权,或者只用基础释义不抄教材。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--blue);">·</span><span><b>DeepSeek 合规</b> — 用户造句会送 DeepSeek 评估,需在隐私政策里说明,可能要做数据脱敏/去标识。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--blue);">·</span><span><b>支付合规</b> — 目前金币系统不接支付,如果未来加会员,得接 ICP 备案 + 支付牌照相关要求。</span></li>
+          </ul>
+        </div>
+
+        <!-- D. 运营基础设施 -->
+        <div class="surface p-5" style="border-top: 3px solid var(--primary);">
+          <h3 class="text-base font-bold mb-3 flex items-center gap-2" style="color: var(--primary);">
+            <span class="tag tag-primary">D</span> 运营 · 上线后才有
+          </h3>
+          <ul class="text-sm space-y-2 text-[#3a4256]">
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--primary);">·</span><span><b>监控</b> — 错误率、API P95、词库命中率、DeepSeek 调用成本/成功率四个仪表盘。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--primary);">·</span><span><b>用户反馈入口</b> — 学习页右下角小按钮,提交问题带 deviceId + 当前 page,后端收集到表里。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--primary);">·</span><span><b>A/B 框架</b> — SRS 间隔、题量、新旧词比例都该可调;前端至少用 <code>localStorage</code> 灰度。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--primary);">·</span><span><b>客服话术 + FAQ</b> — 邮箱验证失败、忘记密码、学段改不了 这三类最常见问题提前写好。</span></li>
+            <li class="flex gap-2"><span class="font-bold shrink-0" style="color:var(--primary);">·</span><span><b>留存机制</b> — 当前 streak 已经有,但缺 push/邮件提醒。Web Push 浏览器支持不错,先做这个,App 化之后再说。</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="surface p-5 mt-5" style="background: linear-gradient(135deg, rgba(47,111,94,0.04), rgba(176,99,103,0.04));">
+        <h3 class="text-sm font-bold mb-2">执行顺序建议</h3>
+        <ol class="text-sm text-[#3a4256] space-y-1 list-decimal list-inside">
+          <li>先把 <b>A.1 反作弊</b> 和 <b>A.2 streak 时区</b> 修了 — 1-2 天能搞定,不改的话上线后数据全是脏的。</li>
+          <li>同时让设计/产品补 <b>C.1 隐私政策</b> 和 <b>C.2 未成年人合规</b> — 这两个是法律红线,改不了技术。</li>
+          <li>内部小范围 alpha(50 人) 跑一周,主要看 <b>A.3 rate limit</b> 和 <b>A.4 邮件</b> 在真实环境下有没有漏。</li>
+          <li>对外 beta(500-1000 人) 期间,补 <b>B 全部</b> 和 <b>D 全部</b> — 边运营边迭代。</li>
+          <li>正式上线: 开放注册 + 营销活动(教育自媒体 / 家长群)。</li>
+        </ol>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="container-x pb-12 text-xs text-[var(--muted)] flex flex-wrap items-center gap-3">
+    <span class="tag-mono tag">linguacraft</span>
+    <span>学习流程图 · d43f2b4 + 2026-06-08 (A 全清 + B.1 SM-2 + B.2 错题本 + B.3 sentence + B.4 词库审计)</span>
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        background: 'transparent',
+        primaryColor: '#ffffff',
+        primaryTextColor: '#14171e',
+        primaryBorderColor: '#2f6f5e',
+        lineColor: '#a8a39a',
+        secondaryColor: '#f0eadc',
+        tertiaryColor: '#fafafa',
+        fontFamily: 'Outfit, system-ui, sans-serif',
+        fontSize: '13px',
+        edgeLabelBackground: '#ffffff',
+        clusterBkg: '#fafafa',
+        clusterBorder: '#e9e3d6'
+      },
+      flowchart: { curve: 'basis', padding: 14, nodeSpacing: 36, rankSpacing: 48, htmlLabels: true },
+      er: { fontSize: '12px' }
+    });
+  </script>
+</body>
+</html>
