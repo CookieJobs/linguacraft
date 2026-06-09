@@ -19,6 +19,7 @@ const EnglishWallPage = React.lazy(() => import('./pages/EnglishWallPage').then(
 const LevelSelectPage = React.lazy(() => import('./pages/LevelSelectPage').then(m => ({ default: m.LevelSelectPage })));
 const DebugPage = React.lazy(() => import('./pages/DebugPage').then(m => ({ default: m.DebugPage })));
 const AdminPage = React.lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })));
+const WrongWordsPage = React.lazy(() => import('./pages/WrongWordsPage').then(m => ({ default: m.WrongWordsPage })));
 
 const AppRouter: React.FC = () => {
   const Shell: React.FC = () => {
@@ -45,6 +46,7 @@ const AppRouter: React.FC = () => {
               <Route path="/level-select" element={<AuthGuard><LevelSelectPage /></AuthGuard>} />
               <Route path="/learn" element={<AuthGuard><LearnPage /></AuthGuard>} />
               <Route path="/review" element={<AuthGuard><ReviewPage /></AuthGuard>} />
+              <Route path="/wrong-words" element={<AuthGuard><WrongWordsPage /></AuthGuard>} />
               <Route path="/english-wall" element={<AuthGuard><EnglishWallPage /></AuthGuard>} />
               <Route path="/debug" element={<AuthGuard><DebugPage /></AuthGuard>} />
               <Route path="/admin" element={<AuthGuard><AdminPage /></AuthGuard>} />

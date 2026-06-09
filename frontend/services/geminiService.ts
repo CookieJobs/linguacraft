@@ -1,5 +1,5 @@
 // input: ../types, ./apiClient, ./config
-// output: fetchWordsForLevel, evaluateSentence, addMastery, fetchMasteryList, logout, getMe, getStats, checkin, getMasteryCount, updateMe, generateStory
+// output: fetchWordsForLevel, evaluateSentence, addMastery, fetchMasteryList, logout, getMe, getStats, checkin, getMasteryCount, updateMe, generateStory, fetchWrongWords, practiceWrongWords
 // pos: 前端/服务层
 // 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
 import { EducationLevel, WordItem, FeedbackResponse, ProgressStats, Question } from "../types";
@@ -18,12 +18,49 @@ export const fetchSessionQuestions = async (level?: string, textbook?: string): 
   return data.questions || []
 }
 
-export const submitAnswer = async (wordId: string, isCorrect: boolean, userSentence?: string): Promise<any> => {
+// 服务端反作弊:不再传 isCorrect,只传 selectedOptionId / userSentence,后端自己判
+export const submitAnswer = async (wordId: string, selectedOptionId: string | undefined, userSentence?: string): Promise<any> => {
   const res = await apiFetch(`${base}/submit`, {
     method: "POST",
-    body: JSON.stringify({ wordId, isCorrect, userSentence })
+    body: JSON.stringify({ wordId, selectedOptionId, userSentence })
   })
   return await res.json()
+}
+
+// ============= 错题本 =============
+export interface WrongWordItem {
+  wordId: string
+  word: string
+  definition: string
+  partOfSpeech: string
+  example: string
+  audioUrl?: string
+  wrongCount: number
+  lastWrongAt: string
+  stage: number
+  consecutiveCorrect: number
+  nextReviewAt: string
+  cefr: string
+  levels: string[]
+}
+
+export const fetchWrongWords = async (level?: string, textbook?: string): Promise<{ items: WrongWordItem[]; count: number }> => {
+  const params: string[] = []
+  if (level) params.push(`level=${encodeURIComponent(level)}`)
+  if (textbook) params.push(`textbook=${encodeURIComponent(textbook)}`)
+  const url = params.length ? `${base}/wrong-words?${params.join('&')}` : `${base}/wrong-words`
+  const res = await apiFetch(url, { method: "GET" })
+  const data = await res.json()
+  return { items: data.items || [], count: data.count || 0 }
+}
+
+export const practiceWrongWords = async (level?: string, textbook?: string): Promise<Question[]> => {
+  const res = await apiFetch(`${base}/wrong-words/practice`, {
+    method: "POST",
+    body: JSON.stringify({ level, textbook })
+  })
+  const data = await res.json()
+  return data.questions || []
 }
 
 function toApiError(status: number, data: any) {
@@ -128,7 +165,7 @@ export const logout = async (): Promise<{ ok: boolean }> => {
   }
 }
 
-export const getMe = async (): Promise<{ id: string; email: string; educationLevel?: string | null; textbook?: string | null }> => {
+export const getMe = async (): Promise<{ id: string; email: string; isAdmin?: boolean; educationLevel?: string | null; textbook?: string | null }> => {
   const res = await apiFetch(`${API_BASE}/api/me`, {
     method: "GET"
   })

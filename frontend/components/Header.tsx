@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { Logo } from './Logo';
 import CoinBalance from './CoinBalance';
 import { StreakStatus } from './StreakStatus';
-import { LogOut, User, ChevronDown, BookOpen, Shield } from 'lucide-react';
+import { LogOut, User, ChevronDown, BookOpen, Shield, Target } from 'lucide-react';
 
 export const Header: React.FC = () => {
     const { token, userEmail, logout, level, isAdmin } = useApp();
@@ -45,6 +45,15 @@ export const Header: React.FC = () => {
                             <div className="hidden sm:block">
                                 <StreakStatus />
                             </div>
+
+                            {/* 错题本入口 */}
+                            <button
+                                onClick={() => navigate('/wrong-words')}
+                                className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-rose-50 to-rose-100 hover:from-rose-100 hover:to-rose-200 text-rose-500 hover:text-rose-600 border border-rose-200/50 hover:border-rose-200 transition-all shadow-sm group"
+                                title="错题本"
+                            >
+                                <Target size={16} className="group-hover:scale-110 transition-transform" />
+                            </button>
                             <div className="hidden sm:block">
                                 <CoinBalance />
                             </div>

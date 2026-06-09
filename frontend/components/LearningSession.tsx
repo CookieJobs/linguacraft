@@ -12,6 +12,7 @@ interface LearningSessionProps {
    currentIndex: number;
    totalCount: number;
    onSuccess: (question: Question, answer: any) => void;
+   onFailure?: (question: Question, answer: any) => void;  // 答错时上报 SRS,不算 streak/奖励
    onSkip: () => void;
    onExit: () => void;
    onReady?: () => void;
@@ -22,6 +23,7 @@ export const LearningSession: React.FC<LearningSessionProps> = ({
    currentIndex,
    totalCount,
    onSuccess,
+   onFailure,
    onSkip,
    onExit,
    onReady
@@ -116,11 +118,16 @@ export const LearningSession: React.FC<LearningSessionProps> = ({
       }
    };
 
-   const handleNext = () => { 
+   const handleNext = () => {
+       const answer = question.type === 'sentence' ? sentence : selectedOption;
        if (feedback?.isCorrect) {
-           const answer = question.type === 'sentence' ? sentence : selectedOption;
-           onSuccess(question, answer); 
+           onSuccess(question, answer);
+       } else if (feedback && onFailure) {
+           // 答错：把"曾经答过这一题"上报后端，让 SRS 的 wrongStreak/stage 降级能跑起来
+           // 不算 streak、不发金币、不写 masteredItems
+           onFailure(question, answer);
        } else {
+           // 用户点 Skip 跳题,没答过,不上报
            onSkip();
        }
    };

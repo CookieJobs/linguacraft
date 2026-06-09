@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>词库体检 · linguacraft</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; display: inline-block; }
+    .chip-level { background: #ede9fe; color: #6d28d9; }
+    .chip-cefr-a1 { background:#dcfce7; color:#166534; }
+    .chip-cefr-a2 { background:#bbf7d0; color:#14532d; }
+    .chip-cefr-b1 { background:#fef9c3; color:#854d0e; }
+    .chip-cefr-b2 { background:#fed7aa; color:#9a3412; }
+    .chip-cefr-c1 { background:#fecaca; color:#991b1b; }
+    .chip-cefr-c2 { background:#fda4af; color:#881337; }
+    .chip-cefr-unknown { background:#e5e7eb; color:#374151; }
+    .bar-track { background:#e5e7eb; height:6px; border-radius:3px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:3px; transition:width .2s; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display:none; }
+    .expanded-row { background:#fafafa; }
+    tr.row:hover { background:#f9fafb; }
+    .scroll-x { overflow-x:auto; }
+    .loader { border:3px solid #e5e7eb; border-top-color:#6366f1; border-radius:50%; width:32px; height:32px; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .field-missing { background:#fee2e2; color:#991b1b; }
+    .field-ok { background:#f3f4f6; color:#374151; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div id="app" class="max-w-[1500px] mx-auto p-6">
+    <!-- Header -->
+    <header class="mb-6 flex items-end justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-slate-800">📚 词库体检</h1>
+        <p class="text-sm text-slate-500 mt-1">linguacraft vocab inspector · 实时数据 · 来源 <code class="bg-slate-100 px-1 rounded">GET /api/admin/vocab</code></p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="reload" class="text-sm bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50">重新加载</button>
+        <button id="toggle-token" class="text-sm bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50">设置 Token</button>
+      </div>
+    </header>
+
+    <!-- Token 输入弹层 -->
+    <div id="token-modal" class="hidden mb-4 bg-amber-50 border border-amber-200 rounded-md p-3">
+      <div class="text-sm text-amber-800 mb-2">粘贴 admin 用户的 JWT（去 <code class="bg-white px-1 rounded">/admin</code> 页面，DevTools → localStorage → <code>linguaCraft_token</code>）</div>
+      <div class="flex gap-2">
+        <input id="token-input" type="text" placeholder="eyJhbGciOi..." class="flex-1 text-xs px-2 py-1.5 border border-amber-300 rounded" />
+        <button id="token-save" class="text-sm bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700">保存</button>
+        <button id="token-clear" class="text-sm bg-white border border-amber-300 px-3 py-1.5 rounded">清空</button>
+      </div>
+    </div>
+
+    <!-- 加载/错误状态 -->
+    <div id="status" class="mb-4"></div>
+
+    <!-- KPI 卡片 -->
+    <div id="kpi" class="hidden grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+
+    <!-- 完整度概览 -->
+    <div id="overview" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"></div>
+
+    <!-- 筛选区 -->
+    <div id="filters" class="hidden bg-white border border-slate-200 rounded-lg p-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+        <div class="md:col-span-3">
+          <label class="text-xs text-slate-500">搜索 headword / 释义</label>
+          <input id="f-q" type="text" placeholder="例如 blue / 蓝色" class="w-full mt-1 px-3 py-1.5 border border-slate-300 rounded-md text-sm" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">学段 (多选)</label>
+          <div id="f-levels" class="flex flex-wrap gap-1.5 mt-1"></div>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">CEFR</label>
+          <select id="f-cefr" class="w-full mt-1 px-2 py-1.5 border border-slate-300 rounded-md text-sm">
+            <option value="">全部</option>
+            <option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option><option>UNKNOWN</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">中文释义按学段</label>
+          <select id="f-viewlevel" class="w-full mt-1 px-2 py-1.5 border border-indigo-300 bg-indigo-50 rounded-md text-sm font-medium">
+            <option value="all">全部 (definitionZh)</option>
+            <option value="primary">Primary (小学)</option>
+            <option value="middle">Middle (初中)</option>
+            <option value="high">High (高中)</option>
+            <option value="university">University (大学)</option>
+            <option value="professional">Professional (雅思/托福)</option>
+            <option value="cet4">CET4</option>
+            <option value="cet6">CET6</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">排序</label>
+          <select id="f-sort" class="w-full mt-1 px-2 py-1.5 border border-slate-300 rounded-md text-sm">
+            <option value="completeness-asc">完整度 低 → 高</option>
+            <option value="completeness-desc">完整度 高 → 低</option>
+            <option value="freq-asc">词频 低 → 高</option>
+            <option value="freq-desc">词频 高 → 低</option>
+            <option value="headword">headword 字母序</option>
+          </select>
+        </div>
+        <div class="md:col-span-1 text-right">
+          <button id="f-reset" class="text-xs text-slate-500 hover:text-slate-800">重置</button>
+        </div>
+      </div>
+      <div class="mt-3 pt-3 border-t border-slate-100">
+        <label class="text-xs text-slate-500 mr-2">缺失字段 (多选):</label>
+        <div id="f-missing" class="inline-flex flex-wrap gap-1.5"></div>
+      </div>
+    </div>
+
+    <!-- 表格 -->
+    <div id="table-wrap" class="hidden bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div class="px-4 py-2 border-b border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+        <span id="result-count">共 0 条</span>
+        <span>点击行展开看全部字段</span>
+      </div>
+      <div class="scroll-x">
+        <div class="w-full text-sm">
+          <div class="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-200">
+            <div class="px-3 py-2 grid gap-2 items-center font-medium" style="grid-template-columns:140px 80px 70px 1fr 80px 140px 1fr 1fr 1fr 1fr 80px;">
+              <div>Headword</div>
+              <div>POS</div>
+              <div>CEFR</div>
+              <div>学段</div>
+              <div>频次</div>
+              <div>完整度</div>
+              <div>缺失字段</div>
+              <div>中文释义<span id="zh-col-suffix"></span></div>
+              <div>英文释义</div>
+              <div>例句</div>
+              <div>IPA</div>
+            </div>
+          </div>
+          <div id="tbody"></div>
+        </div>
+      </div>
+      <div id="pager" class="px-4 py-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500"></div>
+    </div>
+  </div>
+
+  <script>
+  // ============== 状态 ==============
+  const STATE = {
+    data: null,        // { total, summary, words }
+    filtered: [],      // 当前筛选结果
+    page: 0,
+    pageSize: 50,
+    f: { q: '', levels: new Set(), cefr: '', missing: new Set(), sort: 'completeness-asc', viewLevel: 'all' }
+  }
+
+  const LEVELS = ['Primary', 'Middle', 'High', 'University', 'Professional', 'CET4', 'CET6']
+  // levels 大写 -> definitions key 小写
+  const LEVEL_TO_KEY = { Primary:'primary', Middle:'middle', High:'high', University:'university', Professional:'professional', CET4:'cet4', CET6:'cet6' }
+  // 7 档 list (供"查看学段"下拉)
+  const DEF_LEVELS = ['primary','middle','high','university','professional','cet4','cet6']
+  const MISSING_FIELDS = [
+    { key: 'definitionZh', label: '中文释义' },
+    { key: 'definitionEn', label: '英文释义' },
+    { key: 'exampleEn',    label: '例句' },
+    { key: 'ipa',          label: 'IPA' },
+    { key: 'audioUrl',     label: '音频' },
+    { key: 'freqRank',     label: '词频' },
+    { key: 'pos',          label: '词性' }
+  ]
+
+  // ============== 网络 ==============
+  function getToken() { return localStorage.getItem('vocabInspectorToken') || localStorage.getItem('linguaCraft_token') || '' }
+  function setToken(t) { localStorage.setItem('vocabInspectorToken', t) }
+  function clearToken() { localStorage.removeItem('vocabInspectorToken') }
+
+  async function loadVocab() {
+    setStatus('loading', '加载词库中...')
+    const token = getToken()
+    if (!token) {
+      setStatus('error', '没有找到 admin token。点击右上角"设置 Token"粘贴 JWT。')
+      return
+    }
+    try {
+      const res = await fetch('/api/admin/vocab', { headers: { 'Authorization': 'Bearer ' + token } })
+      if (res.status === 401 || res.status === 403) {
+        setStatus('error', `鉴权失败 (${res.status})。请检查 token 是否是 admin 角色。`)
+        return
+      }
+      if (!res.ok) { setStatus('error', `HTTP ${res.status} ${res.statusText}`); return }
+      const data = await res.json()
+      STATE.data = data
+      setStatus('ok', `✅ 加载完成 · 共 ${data.total} 词 · 生成于 ${new Date(data.generatedAt).toLocaleString()}`)
+      render()
+    } catch (e) {
+      setStatus('error', '网络错误: ' + e.message)
+    }
+  }
+
+  function setStatus(kind, msg) {
+    const el = document.getElementById('status')
+    if (kind === 'loading') {
+      el.innerHTML = `<div class="flex items-center gap-3 text-slate-600"><div class="loader"></div><span>${msg}</span></div>`
+    } else if (kind === 'error') {
+      el.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">${msg}</div>`
+    } else if (kind === 'ok') {
+      el.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-md text-sm">${msg}</div>`
+    }
+  }
+
+  // ============== 渲染 ==============
+  function render() {
+    if (!STATE.data) return
+    renderKPI()
+    renderOverview()
+    renderFilters()
+    applyFilter()
+  }
+
+  function renderKPI() {
+    const s = STATE.data.summary
+    const el = document.getElementById('kpi')
+    el.classList.remove('hidden')
+    const topLevel = Object.entries(s.byLevel).sort((a,b) => b[1]-a[1])[0]
+    const worstField = Object.entries(s.fieldMissing).sort((a,b) => b[1]-a[1])[0]
+    const cards = [
+      { label: '总词数', value: STATE.data.total, accent: 'text-slate-800' },
+      { label: '平均完整度', value: s.avgCompleteness + '%', accent: s.avgCompleteness > 80 ? 'text-emerald-600' : s.avgCompleteness > 50 ? 'text-amber-600' : 'text-red-600' },
+      { label: '真实例句占比', value: s.realExamplePct + '%', accent: 'text-indigo-600', sub: `${s.realExampleCount} / ${STATE.data.total}` },
+      { label: '最大学段', value: topLevel ? `${topLevel[0]} (${topLevel[1]})` : '-', accent: 'text-purple-600' }
+    ]
+    el.innerHTML = cards.map(c => `
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-xs text-slate-500">${c.label}</div>
+        <div class="text-2xl font-semibold ${c.accent} mt-1">${c.value}</div>
+        ${c.sub ? `<div class="text-xs text-slate-400 mt-0.5">${c.sub}</div>` : ''}
+      </div>
+    `).join('')
+  }
+
+  function renderOverview() {
+    const el = document.getElementById('overview')
+    el.classList.remove('hidden')
+    const s = STATE.data.summary
+    const total = STATE.data.total
+
+    // 字段覆盖率横条
+    const fieldBars = Object.entries(s.fieldMissing).map(([k, n]) => {
+      const present = total - n
+      const pct = total > 0 ? (present / total) * 100 : 0
+      const color = pct < 30 ? 'bg-red-500' : pct < 70 ? 'bg-amber-500' : 'bg-emerald-500'
+      return `<div class="flex items-center gap-2 text-xs">
+        <div class="w-24 text-slate-600">${k}</div>
+        <div class="flex-1 bar-track"><div class="bar-fill ${color}" style="width:${pct.toFixed(1)}%"></div></div>
+        <div class="w-20 text-right tabular-nums text-slate-500">${present}/${total} (${pct.toFixed(0)}%)</div>
+      </div>`
+    }).join('')
+
+    // 按学段完整度
+    const levelHealth = LEVELS.map(lv => {
+      const subset = STATE.data.words.filter(w => w.levels.includes(lv))
+      if (subset.length === 0) return ''
+      const avgC = subset.reduce((s, w) => s + w.completeness, 0) / subset.length
+      const realEx = subset.filter(w => !w.isDummyExample && w.exampleEn).length
+      const color = avgC > 80 ? 'text-emerald-600' : avgC > 50 ? 'text-amber-600' : 'text-red-600'
+      return `<tr class="border-t border-slate-100">
+        <td class="py-1.5 pr-3 text-slate-700">${lv}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums">${subset.length}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums ${color}">${avgC.toFixed(1)}%</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums">${realEx} (${((realEx/subset.length)*100).toFixed(0)}%)</td>
+      </tr>`
+    }).join('')
+
+    el.innerHTML = `
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-sm font-medium text-slate-700 mb-3">🩺 字段覆盖率</div>
+        <div class="space-y-2">${fieldBars}</div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-sm font-medium text-slate-700 mb-3">🎓 按学段完整度</div>
+        <table class="w-full text-xs">
+          <thead class="text-slate-500">
+            <tr><th class="text-left pb-1.5">学段</th><th class="text-right pb-1.5">词数</th><th class="text-right pb-1.5">完整度</th><th class="text-right pb-1.5">真实例句</th></tr>
+          </thead>
+          <tbody>${levelHealth}</tbody>
+        </table>
+      </div>
+    `
+  }
+
+  function renderFilters() {
+    const el = document.getElementById('filters')
+    el.classList.remove('hidden')
+    // 学段
+    const fLevels = document.getElementById('f-levels')
+    fLevels.innerHTML = LEVELS.map(lv => `
+      <label class="flex items-center gap-1 text-xs cursor-pointer bg-slate-100 px-2 py-0.5 rounded hover:bg-slate-200">
+        <input type="checkbox" value="${lv}" class="f-level-cb" ${STATE.f.levels.has(lv) ? 'checked' : ''} />
+        <span>${lv}</span>
+      </label>
+    `).join('')
+    fLevels.querySelectorAll('.f-level-cb').forEach(cb => {
+      cb.addEventListener('change', e => {
+        if (e.target.checked) STATE.f.levels.add(e.target.value); else STATE.f.levels.delete(e.target.value)
+        applyFilter()
+      })
+    })
+    // 缺失字段
+    const fMissing = document.getElementById('f-missing')
+    fMissing.innerHTML = MISSING_FIELDS.map(m => `
+      <label class="flex items-center gap-1 text-xs cursor-pointer bg-slate-100 px-2 py-0.5 rounded hover:bg-slate-200">
+        <input type="checkbox" value="${m.key}" class="f-missing-cb" ${STATE.f.missing.has(m.key) ? 'checked' : ''} />
+        <span>${m.label}</span>
+      </label>
+    `).join('')
+    fMissing.querySelectorAll('.f-missing-cb').forEach(cb => {
+      cb.addEventListener('change', e => {
+        if (e.target.checked) STATE.f.missing.add(e.target.value); else STATE.f.missing.delete(e.target.value)
+        applyFilter()
+      })
+    })
+  }
+
+  function applyFilter() {
+    if (!STATE.data) return
+    const { q, levels, cefr, missing, sort } = STATE.f
+    const ql = q.trim().toLowerCase()
+    let arr = STATE.data.words.filter(w => {
+      if (ql) {
+        const hay = (w.headword + ' ' + (w.definitionZh||'') + ' ' + (w.definitionEn||'')).toLowerCase()
+        if (!hay.includes(ql)) return false
+      }
+      if (levels.size > 0) {
+        if (!w.levels.some(lv => levels.has(lv))) return false
+      }
+      if (cefr && (w.cefr || '').toUpperCase() !== cefr.toUpperCase()) return false
+      if (missing.size > 0) {
+        for (const m of missing) {
+          // dummy 例句也算缺 exampleEn
+          const actualMissing = m === 'exampleEn' ? (w.isDummyExample || !w.exampleEn) : w.missingFields.includes(m)
+          if (!actualMissing) return false
+        }
+      }
+      return true
+    })
+    // 排序
+    arr.sort((a, b) => {
+      switch (sort) {
+        case 'completeness-asc': return a.completeness - b.completeness
+        case 'completeness-desc': return b.completeness - a.completeness
+        case 'freq-asc': return (a.freqRank ?? 1e9) - (b.freqRank ?? 1e9)
+        case 'freq-desc': return (b.freqRank ?? -1) - (a.freqRank ?? -1)
+        case 'headword': return (a.headword || '').localeCompare(b.headword || '')
+      }
+      return 0
+    })
+    STATE.filtered = arr
+    STATE.page = 0
+    renderTable()
+  }
+
+  function renderTable() {
+    const wrap = document.getElementById('table-wrap')
+    wrap.classList.remove('hidden')
+    const arr = STATE.filtered
+    document.getElementById('result-count').textContent = `共 ${arr.length} 条` + (arr.length !== STATE.data.total ? ` (已筛选, 总 ${STATE.data.total})` : '')
+
+    // 中文释义列后缀
+    const suffix = document.getElementById('zh-col-suffix')
+    if (suffix) suffix.textContent = STATE.f.viewLevel === 'all' ? '' : ` · ${STATE.f.viewLevel}`
+
+    const start = STATE.page * STATE.pageSize
+    const pageRows = arr.slice(start, start + STATE.pageSize)
+
+    const tbody = document.getElementById('tbody')
+    tbody.innerHTML = pageRows.map(w => rowHtml(w)).join('')
+
+    // pager
+    const totalPages = Math.max(1, Math.ceil(arr.length / STATE.pageSize))
+    document.getElementById('pager').innerHTML = `
+      <span>第 ${STATE.page+1} / ${totalPages} 页</span>
+      <span class="flex gap-1">
+        <button class="px-2 py-0.5 border rounded ${STATE.page===0?'opacity-30':''}" data-page="prev">‹ 上一页</button>
+        <button class="px-2 py-0.5 border rounded ${STATE.page>=totalPages-1?'opacity-30':''}" data-page="next">下一页 ›</button>
+      </span>
+    `
+    document.querySelectorAll('#pager button[data-page]').forEach(b => {
+      b.addEventListener('click', () => {
+        if (b.dataset.page === 'prev' && STATE.page > 0) STATE.page--
+        if (b.dataset.page === 'next' && STATE.page < totalPages-1) STATE.page++
+        renderTable()
+      })
+    })
+
+    // details toggle
+    tbody.querySelectorAll('details').forEach(d => {
+      d.addEventListener('toggle', () => {
+        const row = d.closest('.row')
+        if (row) row.classList.toggle('expanded-row', d.open)
+      })
+    })
+  }
+
+  function rowHtml(w) {
+    const cefrClass = `chip-cefr-${(w.cefr||'unknown').toLowerCase()}`
+    const levelChips = (w.levels || []).map(lv => `<span class="chip chip-level">${lv}</span>`).join(' ')
+    const missingChips = w.missingFields.map(f => {
+      const map = { definitionZh:'中文释义', definitionEn:'英文释义', exampleEn:'例句', ipa:'IPA', audioUrl:'音频', freqRank:'词频', pos:'词性' }
+      return `<span class="chip field-missing">✗ ${map[f] || f}</span>`
+    }).join(' ')
+    const compColor = w.completeness > 80 ? 'bg-emerald-500' : w.completeness > 50 ? 'bg-amber-500' : 'bg-red-500'
+
+    // 当前查看学段: 决定"中文释义"列显示什么
+    const vl = STATE.f.viewLevel
+    let zhCol, zhColBadge
+    if (vl === 'all') {
+      zhCol = w.definitionZh
+      zhColBadge = ''
+    } else {
+      const lvlDef = w.definitions?.[vl]
+      const has = lvlDef && lvlDef.trim()
+      zhCol = has ? lvlDef : w.definitionZh
+      zhColBadge = has
+        ? `<span class="chip ml-1" style="background:#e0e7ff;color:#3730a3">${vl}</span>`
+        : `<span class="chip field-missing ml-1">✗ ${vl} 空,降级</span>`
+    }
+
+    // 跨学段差异 indicator
+    const nonEmptyDefs = Object.entries(w.definitions || {}).filter(([k,v]) => v && v.trim() && v !== w.definitionZh)
+    const diffBadge = (w.levels || []).length >= 2 && nonEmptyDefs.length >= 1
+      ? `<span class="chip ml-1" style="background:#fef3c7;color:#92400e" title="${nonEmptyDefs.map(([k,v])=>k+': '+v).join(' | ')}">⚡ ${nonEmptyDefs.length} 学段不同</span>`
+      : ''
+
+    return `
+      <div class="row border-t border-slate-100">
+        <details>
+            <summary class="px-3 py-2 grid" style="grid-template-columns:140px 80px 70px 1fr 80px 140px 1fr 1fr 1fr 1fr 80px; gap:8px; align-items:center;">
+              <span class="font-medium text-slate-800">${escapeHtml(w.headword)}</span>
+              <span class="text-xs text-slate-500">${escapeHtml(w.pos)}</span>
+              <span><span class="chip ${cefrClass}">${escapeHtml(w.cefr || '?')}</span></span>
+              <span>${levelChips}</span>
+              <span class="text-xs text-slate-500 tabular-nums">${w.freqRank ?? '—'}</span>
+              <span>
+                <div class="flex items-center gap-1.5">
+                  <div class="bar-track w-16"><div class="bar-fill ${compColor}" style="width:${w.completeness}%"></div></div>
+                  <span class="text-xs tabular-nums">${w.completeness}%</span>
+                </div>
+              </span>
+              <span class="flex flex-wrap gap-1">${missingChips || '<span class="text-xs text-emerald-600">完整</span>'}</span>
+              <span class="text-xs text-slate-600 truncate" title="${escapeAttr(zhCol)}">${escapeHtml(zhCol) || '<span class=text-red-400>—</span>'}${zhColBadge}${diffBadge}</span>
+              <span class="text-xs text-slate-500 truncate" title="${escapeAttr(w.definitionEn)}">${escapeHtml(w.definitionEn) || '<span class=text-red-400>—</span>'}</span>
+              <span class="text-xs text-slate-500 truncate" title="${escapeAttr(w.exampleEn)}">${escapeHtml(w.exampleEn) || '<span class=text-red-400>—</span>'}</span>
+              <span class="text-xs text-slate-500 font-mono">${escapeHtml(w.ipa) || '<span class=text-red-400>—</span>'}</span>
+            </summary>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-xs">
+                <div><span class="text-slate-400">id:</span> <span class="font-mono">${w.id}</span></div>
+                <div><span class="text-slate-400">lemma:</span> ${escapeHtml(w.lemma)}</div>
+                <div><span class="text-slate-400">audioUrl:</span> ${w.audioUrl ? `<a class="text-indigo-600 hover:underline" href="${escapeAttr(w.audioUrl)}" target="_blank">${escapeHtml(w.audioUrl)}</a>` : '<span class="text-red-400">—</span>'}</div>
+                <div><span class="text-slate-400">source:</span> ${escapeHtml(w.source) || '<span class="text-red-400">—</span>'}</div>
+                <div><span class="text-slate-400">topics:</span> ${(w.topics||[]).map(t=>`<span class="chip bg-slate-200 text-slate-700">${escapeHtml(t)}</span>`).join(' ') || '<span class="text-red-400">—</span>'}</div>
+                <div><span class="text-slate-400">textbooks:</span> ${(w.textbooks||[]).map(t=>`<span class="chip bg-blue-100 text-blue-700">${escapeHtml(t)}</span>`).join(' ') || '<span class="text-red-400">—</span>'}</div>
+                <div class="col-span-2 mt-2 pt-2 border-t border-slate-200">
+                  <div class="text-slate-400 mb-1">definitions (按学段) ${STATE.f.viewLevel !== 'all' ? `<span class="ml-2 text-indigo-600 font-medium">查看: ${STATE.f.viewLevel}</span>` : ''}</div>
+                  <div class="space-y-1">${Object.keys(w.definitions||{}).length === 0 ? '<span class="text-red-400">—</span>' :
+                    Object.entries(w.definitions).map(([k,v]) => {
+                      const empty = !v || !v.trim()
+                      const highlighted = STATE.f.viewLevel !== 'all' && STATE.f.viewLevel === k
+                      return `<div class="${highlighted ? 'bg-indigo-50 -mx-2 px-2 py-1 rounded border-l-2 border-indigo-500' : ''}">` +
+                        `<span class="chip ${empty ? 'bg-red-100 text-red-700' : 'bg-slate-200'}">${k}</span> ` +
+                        (empty ? '<span class="text-red-400">—</span>' : escapeHtml(v)) +
+                        `</div>`
+                    }).join('')}</div>
+                </div>
+                <div class="col-span-2 mt-2 pt-2 border-t border-slate-200">
+                  <div class="text-slate-400 mb-1">contextualDefinitions (教材语境)</div>
+                  ${(w.contextualDefinitions||[]).length === 0 ? '<span class="text-red-400">—</span>' :
+                    w.contextualDefinitions.map(cd => `
+                      <div class="mb-2 p-2 bg-white border border-slate-200 rounded">
+                        <div class="font-medium text-indigo-700">${escapeHtml(cd.textbook)}</div>
+                        <div class="text-slate-600">${escapeHtml(cd.definitionZh)}</div>
+                        <div class="text-slate-400 italic mt-1">"${escapeHtml(cd.exampleEn)}"</div>
+                      </div>
+                    `).join('')}
+                </div>
+              </div>
+            </div>
+          </details>
+      </div>
+    `
+  }
+
+  function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
+  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;') }
+
+  // ============== 绑定 ==============
+  document.getElementById('reload').addEventListener('click', loadVocab)
+  document.getElementById('toggle-token').addEventListener('click', () => {
+    const m = document.getElementById('token-modal')
+    m.classList.toggle('hidden')
+    document.getElementById('token-input').value = getToken()
+  })
+  document.getElementById('token-save').addEventListener('click', () => {
+    const t = document.getElementById('token-input').value.trim()
+    if (t) setToken(t); else clearToken()
+    document.getElementById('token-modal').classList.add('hidden')
+    loadVocab()
+  })
+  document.getElementById('token-clear').addEventListener('click', () => {
+    clearToken()
+    document.getElementById('token-input').value = ''
+    setStatus('error', 'Token 已清空。点击"重新加载"重新设置。')
+  })
+  document.getElementById('f-q').addEventListener('input', e => { STATE.f.q = e.target.value; applyFilter() })
+  document.getElementById('f-cefr').addEventListener('change', e => { STATE.f.cefr = e.target.value; applyFilter() })
+  document.getElementById('f-sort').addEventListener('change', e => { STATE.f.sort = e.target.value; applyFilter() })
+  document.getElementById('f-viewlevel').addEventListener('change', e => { STATE.f.viewLevel = e.target.value; renderTable() })
+  document.getElementById('f-reset').addEventListener('click', () => {
+    STATE.f = { q: '', levels: new Set(), cefr: '', missing: new Set(), sort: 'completeness-asc', viewLevel: 'all' }
+    document.getElementById('f-q').value = ''
+    document.getElementById('f-cefr').value = ''
+    document.getElementById('f-sort').value = 'completeness-asc'
+    document.getElementById('f-viewlevel').value = 'all'
+    renderFilters()
+    applyFilter()
+  })
+
+  // 启动
+  // 优先从 ?token=xxx 注入 (便于分享/截图)
+  const urlParams = new URLSearchParams(location.search)
+  const urlToken = urlParams.get('token')
+  if (urlToken) {
+    setToken(urlToken)
+    history.replaceState(null, '', location.pathname)
+  }
+  loadVocab().then(() => {
+    // ?viewLevel=primary 自动设置"中文释义"按学段 (便于截图/分享)
+    const vl = urlParams.get('viewLevel')
+    if (vl && DEF_LEVELS.includes(vl)) {
+      STATE.f.viewLevel = vl
+      const sel = document.getElementById('f-viewlevel')
+      if (sel) sel.value = vl
+    }
+    // ?q=blue 同步到搜索框
+    const q = urlParams.get('q')
+    if (q) {
+      STATE.f.q = q
+      const qi = document.getElementById('f-q')
+      if (qi) qi.value = q
+    }
+    applyFilter()
+    // ?expand=first 自动展开首行 (便于截图/分享)
+    if (urlParams.get('expand') === 'first') {
+      const r = document.querySelectorAll('.row')[0]
+      if (r) {
+        const d = r.querySelector('details')
+        if (d) { d.open = true; d.dispatchEvent(new Event('toggle')); window.scrollTo(0, 0) }
+      }
+    }
+  })
+  </script>
+</body>
+</html>

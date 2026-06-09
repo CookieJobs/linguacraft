@@ -10,7 +10,7 @@ import { useApp } from '../contexts/AppContext';
 import { RefreshCw, LogIn, BookOpen } from 'lucide-react';
 
 export const LearnPage: React.FC = () => {
-  const { sessionQueue, currentIndex, handleQuestionSuccess, handleSkip, exitLearning, showSummary, sessionProgressed, startNextSession, streak, streakAtSessionStart, isLoading, loadError, logout } = useApp();
+  const { sessionQueue, currentIndex, handleQuestionSuccess, handleQuestionFailure, handleSkip, exitLearning, showSummary, sessionProgressed, startNextSession, streak, streakAtSessionStart, isLoading, loadError, logout } = useApp();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,6 +25,7 @@ export const LearnPage: React.FC = () => {
             currentIndex={currentIndex}
             totalCount={sessionQueue.length}
             onSuccess={handleQuestionSuccess}
+            onFailure={handleQuestionFailure}
             onSkip={handleSkip}
             onExit={() => { exitLearning(); navigate(-1); }}
             onReady={() => { }}

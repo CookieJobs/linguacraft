@@ -21,6 +21,7 @@ type AppContextType = {
   loadError: { code: string; message: string } | null;
   handleLevelSelect: (selectedLevel: EducationLevel, selectedTextbook?: string | null) => Promise<void>;
   handleQuestionSuccess: (question: Question, answer: any) => Promise<void>;
+  handleQuestionFailure: (question: Question, answer: any) => Promise<void>;
   handleSkip: () => void;
   moveToNext: () => void;
   resetToHome: () => void;
@@ -51,14 +52,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('linguaCraft_token'));
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [streak, setStreak] = useState<number>(() => {
-    try {
-      const raw = localStorage.getItem('linguaCraft_streak');
-      if (!raw) return 0;
-      const s = JSON.parse(raw);
-      return typeof s?.count === 'number' ? s.count : 0;
-    } catch { return 0; }
-  });
+  // streak 以后端为权威源(UTC 天的连续天数),初始 0,由 useEffect 拉 getStats 覆盖
+  const [streak, setStreak] = useState<number>(0);
   const [sessionProgress, setSessionProgress] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [streakAtSessionStart, setStreakAtSessionStart] = useState<number>(0);
@@ -191,32 +186,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setMasteredItems(prev => [newItem, ...prev]);
     }
     setSessionProgress(p => p + 1);
-    
-    // Submit to backend
-    try { 
-        await submitAnswer(question.wordId, true, question.type === 'sentence' ? answer : undefined) 
+
+    // Submit to backend — 服务端反作弊,只传 selectedOptionId 或 userSentence,不信前端 isCorrect
+    try {
+        if (question.type === 'sentence') {
+            await submitAnswer(question.wordId, undefined, answer)
+        } else {
+            await submitAnswer(question.wordId, answer, undefined)
+        }
     } catch { }
 
+    // streak 以后端为权威源(UTC 天的连续天数),mastery 触发后端 stats.checkin 内部 +1
+    // 这里直接拉一次 stats,避免前端 localStorage 和后端 UTC 漂一天
     try {
-      const today = new Date();
-      const toStr = (d: Date) => {
-        const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${dd}`;
-      };
-      const parse = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
-      const todayStr = toStr(today);
-      const raw = localStorage.getItem('linguaCraft_streak');
-      let next = 1; let lastDateStr: string | null = null;
-      if (raw) {
-        try {
-          const s = JSON.parse(raw); lastDateStr = s?.lastDate || null; const last = lastDateStr ? parse(lastDateStr) : null;
-          if (lastDateStr === todayStr) next = s?.count || 1;
-          else if (last) { const diffDays = Math.floor((today.getTime() - last.getTime()) / 86400000); next = diffDays === 1 ? (s?.count || 0) + 1 : 1; }
-        } catch { next = 1; }
-      }
-      localStorage.setItem('linguaCraft_streak', JSON.stringify({ count: next, lastDate: todayStr }));
-      setStreak(next);
+      const s = await getStats();
+      setStreak(s.currentStreak || 0);
     } catch { }
+    moveToNext();
+  };
+
+  const handleQuestionFailure = async (question: Question, answer: any) => {
+    // 答错：把答题记录上报后端，让 SRS 的 wrongStreak / stage 降级能跑起来
+    // 不算 streak、不发金币、不写 masteredItems、不进 sessionProgressed
+    // 服务端自己用 selectedOptionId 判 false,所以传过去让后端校验
+    try {
+      if (question.type === 'sentence') {
+        await submitAnswer(question.wordId, undefined, answer);
+      } else {
+        await submitAnswer(question.wordId, answer, undefined);
+      }
+    } catch { /* 静默失败,继续走题,不阻塞 UX */ }
     moveToNext();
   };
 
@@ -253,6 +252,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { await apiLogout() } catch { }
     localStorage.removeItem('linguaCraft_token');
     localStorage.removeItem('linguaCraft_refresh');
+    // 兼容老用户: 删掉前端旧的 streak localStorage,以后端为唯一权威
+    localStorage.removeItem('linguaCraft_streak');
     setTokenState(null);
     setLevel(null);
     setIsAdmin(false);
@@ -297,6 +298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadError,
     handleLevelSelect,
     handleQuestionSuccess,
+    handleQuestionFailure,
     handleSkip,
     moveToNext,
     resetToHome,
