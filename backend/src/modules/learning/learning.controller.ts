@@ -19,12 +19,17 @@ import { Response } from 'express'
 import { DeepSeekService } from './deepseek.service'
 import { LearningSchedulerService } from './learning-scheduler.service'
 import { QuestionGeneratorService } from './question-generator.service'
+import { UserProfileDocument } from '../user/user.schema'
+
+/** 规范化后的学段 (vocab.service.levelToKey / getGradeDefinition 期望的格式) */
+type NormalizedLevel = 'Primary' | 'Middle' | 'High' | 'CET4' | 'CET6' | 'University' | 'Professional'
 
 @Controller('learning')
 @UseGuards(RateLimitGuard)
 export class LearningController {
   constructor(
     @InjectModel('WordMastery') private masteryModel: Model<WordMasteryDocument>,
+    @InjectModel('UserProfile') private profileModel: Model<UserProfileDocument>,
     private vocab: VocabService,
     private stats: StatsService,
     private deepseek: DeepSeekService,
@@ -34,29 +39,49 @@ export class LearningController {
     private questionGenerator: QuestionGeneratorService
   ) { }
 
+  /**
+   * 把前端 EducationLevel 枚举值 (e.g. "Primary School (小学)") 映射到内部 short code (e.g. "Primary")
+   * 用于 GET /learning/session 的 level/textbook query 参数 + user profile.educationLevel
+   */
+  private normalizeLevel(level: string): NormalizedLevel {
+    const map: Record<string, NormalizedLevel> = {
+      'Primary School (小学)': 'Primary', 'Junior High School (初中)': 'Middle', 'Senior High School (高中)': 'High',
+      'CET-4 (四级)': 'CET4', 'CET-6 (六级)': 'CET6',
+      'University (大学/四六级)': 'University', 'Professional/Study Abroad (雅思/托福/职场)': 'Professional',
+      'Primary': 'Primary', 'Middle': 'Middle', 'High': 'High', 'CET4': 'CET4', 'CET6': 'CET6',
+      'University': 'University', 'Professional': 'Professional'
+    }
+    return map[level] || (level as NormalizedLevel) || 'Primary'
+  }
+
+  /**
+   * 拉取用户 profile.educationLevel 并规范化;没设置时返回 undefined (由 question-generator 兜底到 word.levels[0])
+   */
+  private async getUserLevel(userId: string): Promise<NormalizedLevel | undefined> {
+    const profile = await this.profileModel.findOne({ userId: String(userId) }).lean()
+    if (!profile?.educationLevel) return undefined
+    return this.normalizeLevel(profile.educationLevel)
+  }
+
   @Get('session') @UseGuards(JwtGuard)
   // 拉题目:每个用户每小时 60 次(留足 buffer,正常一天 20 题,顶多 5 次/天)
   @RateLimit({ namespace: 'learning-session', limit: 60, windowSec: 3600, identity: 'user' })
   async getSession(@Req() req: any, @Query('level') level?: string, @Query('textbook') textbook?: string) {
     const userId = req.user.id
-    const normalize = (s: string) => {
-      const map: Record<string, any> = {
-        'Primary School (小学)': 'Primary', 'Junior High School (初中)': 'Middle', 'Senior High School (高中)': 'High',
-        'CET-4 (四级)': 'CET4', 'CET-6 (六级)': 'CET6',
-        'University (大学/四六级)': 'University', 'Professional/Study Abroad (雅思/托福/职场)': 'Professional'
-      }
-      return map[s] || s
-    }
 
     // Louis 新学习路径：每次 10 题 = 4 旧词 + 6 新词
     // 旧词：从待复习列表获取（最多4个，stage 1-3）
     const OLD_WORD_COUNT = 4
     const NEW_WORD_COUNT = 6
     const dueItems = await this.scheduler.getDueWords(userId, OLD_WORD_COUNT)
-    
+
+    // 2026-06-09 B 任务: 按用户学段展示分级释义
+    // userLevel 优先于 word.levels[0]; 没设置时 question-generator 内部兜底到 word.levels[0]
+    const userLevel = await this.getUserLevel(userId)
+
     const questions: any[] = []
     const allLearnedWordIds = await this.scheduler.getAllLearnedWordIds(userId)
-    
+
     // 处理旧词：按 stage 匹配题型
     for (const item of dueItems) {
       const word = item.wordId as any
@@ -66,7 +91,7 @@ export class LearningController {
       if (item.stage === 0 || item.stage === 1) {
         // Stage 0-1: 选择题 (识别层)
         const mode = Math.random() > 0.5 ? 'en-zh' : 'zh-en'
-        q = await this.questionGenerator.generateChoiceQuestion(word, mode)
+        q = await this.questionGenerator.generateChoiceQuestion(word, mode, userLevel)
       } else if (item.stage === 2) {
         // Stage 2: 填空题 (quiz, 用例句挖空,语境识别)
         q = await this.questionGenerator.generateQuizQuestion(word)
@@ -76,13 +101,13 @@ export class LearningController {
         // 前端用 SentenceQuestion 组件渲染文本框;后端 DeepSeek.evaluateSentence 判分
         q = await this.questionGenerator.generateSentenceQuestion(word)
       }
-      
+
       if (q) {
         q.progressId = String(item._id)
         const isDummyExample = word.exampleEn?.startsWith('Example for ') && word.exampleEn?.includes(word.headword);
         q.word = {
           word: word.headword,
-          definition: word.definitionZh,
+          definition: userLevel ? this.vocab.getGradeDefinition(word, userLevel) : word.definitionZh,
           partOfSpeech: word.pos,
           example: isDummyExample ? '' : word.exampleEn,
           audioUrl: word.audioUrl
@@ -94,7 +119,7 @@ export class LearningController {
     // 填入新词：补充到 10 题
     const neededSlots = Math.max(0, 10 - questions.length)
     if (neededSlots > 0 && level) {
-      const levelCode = normalize(level)
+      const levelCode = this.normalizeLevel(level)
       try {
         const newWords = await this.vocab.pickWords(
           levelCode,
@@ -103,15 +128,15 @@ export class LearningController {
           Math.random().toString(),
           textbook
         )
-        
+
         for (const word of newWords) {
           const w = word as any
           const mode = Math.random() > 0.5 ? 'en-zh' : 'zh-en'
-          const q: any = await this.questionGenerator.generateChoiceQuestion(w, mode)
+          const q: any = await this.questionGenerator.generateChoiceQuestion(w, mode, userLevel)
           const isDummyExample = w.exampleEn?.startsWith('Example for ') && w.exampleEn?.includes(w.headword);
           q.word = {
             word: w.headword,
-            definition: w.definitionZh,
+            definition: userLevel ? this.vocab.getGradeDefinition(w, userLevel) : w.definitionZh,
             partOfSpeech: w.pos,
             example: isDummyExample ? '' : w.exampleEn,
             audioUrl: w.audioUrl
@@ -122,7 +147,7 @@ export class LearningController {
         // ignore VOCAB_EMPTY or others
       }
     }
-    
+
     return { questions }
   }
 
@@ -298,6 +323,7 @@ export class LearningController {
   // ============= 错题本 =============
   // GET /api/learning/wrong-words?level=...&textbook=...
   // 列出用户答错过且未掌握的单词(wrongCount > 0 && stage < 3)
+  // 2026-06-09 B 任务: definition 字段按用户学段展示 (getGradeDefinition)
   @Get('wrong-words') @UseGuards(JwtGuard)
   @RateLimit({ namespace: 'learning-wrong-list', limit: 120, windowSec: 3600, identity: 'user' })
   async listWrongWords(
@@ -305,25 +331,36 @@ export class LearningController {
     @Query('level') level?: string,
     @Query('textbook') textbook?: string
   ) {
+    const userId = req.user.id
+    const userLevel = await this.getUserLevel(userId)
     const items = await this.progressService.getWrongWords(
-      req.user.id,
+      userId,
       level ? this.normalizeLevel(level) : undefined,
       textbook
     )
-    return { items, count: items.length }
+    // 按学段重写 definition (默认是 progressService 给的 word.definitionZh)
+    // progressService 已把 definitions 字段带回来 (见 getWrongWords 注释), 避免 N+1
+    const resolved = items.map((it: any) => {
+      if (!userLevel) return it
+      return { ...it, definition: this.vocab.getGradeDefinition(it as any, userLevel) }
+    })
+    return { items: resolved, count: resolved.length }
   }
 
   // POST /api/learning/wrong-words/practice
   // 拉 5 道错题组成 quick session, 用于"错题重练"
   // body: { level?: string, textbook?: string }
+  // 2026-06-09 B 任务: 走 generateChoiceQuestion 时传 userLevel, 学习侧按学段展示
   @Post('wrong-words/practice') @UseGuards(JwtGuard)
   @RateLimit({ namespace: 'learning-wrong-practice', limit: 30, windowSec: 3600, identity: 'user' })
   async practiceWrongWords(
     @Req() req: any,
     @Body() body: { level?: string; textbook?: string }
   ) {
+    const userId = req.user.id
     const level = body.level ? this.normalizeLevel(body.level) : undefined
-    const items = await this.progressService.getWrongWords(req.user.id, level, body.textbook, 5)
+    const userLevel = await this.getUserLevel(userId)
+    const items = await this.progressService.getWrongWords(userId, level, body.textbook, 5)
     if (items.length === 0) {
       return { questions: [], count: 0, message: 'no_wrong_words' }
     }
@@ -334,11 +371,11 @@ export class LearningController {
       const word = await this.vocab.getById(item.wordId)
       if (!word) continue
       const mode = Math.random() > 0.5 ? 'en-zh' : 'zh-en'
-      const q: any = await this.questionGenerator.generateChoiceQuestion(word, mode)
+      const q: any = await this.questionGenerator.generateChoiceQuestion(word, mode, userLevel)
       const isDummyExample = word.exampleEn?.startsWith('Example for ') && word.exampleEn?.includes(word.headword)
       q.word = {
         word: word.headword,
-        definition: word.definitionZh,
+        definition: userLevel ? this.vocab.getGradeDefinition(word, userLevel) : word.definitionZh,
         partOfSpeech: word.pos,
         example: isDummyExample ? '' : word.exampleEn,
         audioUrl: word.audioUrl
@@ -346,14 +383,5 @@ export class LearningController {
       questions.push(q)
     }
     return { questions, count: questions.length }
-  }
-
-  private normalizeLevel(level: string): string {
-    const map: Record<string, any> = {
-      'Primary School (小学)': 'Primary', 'Junior High School (初中)': 'Middle', 'Senior High School (高中)': 'High',
-      'CET-4 (四级)': 'CET4', 'CET-6 (六级)': 'CET6',
-      'University (大学/四六级)': 'University', 'Professional/Study Abroad (雅思/托福/职场)': 'Professional'
-    }
-    return map[level] || level
   }
 }

@@ -134,6 +134,8 @@ export class ProgressService {
         const wordMap = new Map(words.map(w => [String(w._id), w]))
 
         // 过滤掉按 level/textbook 过滤后不存在的词,合并返回
+        // 2026-06-09 B 任务: 携带 definitions + headword + definitionZh 给 controller 算 grade def
+        // (避免 controller 在 wrong-words 列表上做 N+1 refetch)
         return progresses
             .map(p => {
                 const w = wordMap.get(String(p.wordId))
@@ -141,7 +143,9 @@ export class ProgressService {
                 return {
                     wordId: String(p.wordId),
                     word: w.headword,
+                    headword: w.headword,
                     definition: w.definitionZh,
+                    definitions: w.definitions || null,
                     partOfSpeech: w.pos,
                     example: w.exampleEn,
                     audioUrl: w.audioUrl,

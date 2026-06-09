@@ -16,7 +16,7 @@ import { WordMasterySchema } from './mastery.schema'
 import { UserWordProgressSchema } from './user-word-progress.schema'
 import { LearningSchedulerService } from './learning-scheduler.service'
 import { QuestionGeneratorService } from './question-generator.service'
-import { UserSchema } from '../user/user.schema'
+import { UserSchema, UserProfileSchema } from '../user/user.schema'
 import { StatsModule } from '../stats/stats.module'
 import { VocabSeedService } from './vocab-seed.service'
 import { JwtGuard } from '../../common/jwt.guard'
@@ -27,6 +27,8 @@ import { WalletModule } from '../wallet/wallet.module'
   imports: [
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
+      // 2026-06-09 B 任务: GET /learning/session 按用户 profile.educationLevel 展示分级释义
+      { name: 'UserProfile', schema: UserProfileSchema },
       { name: 'VocabWord', schema: VocabWordSchema },
       { name: 'WordMastery', schema: WordMasterySchema },
       { name: 'UserWordProgress', schema: UserWordProgressSchema }
@@ -37,18 +39,19 @@ import { WalletModule } from '../wallet/wallet.module'
   ],
   controllers: [LearningController, StoryController],
   providers: [
-    JwtGuard, 
-    VocabService, 
-    DeepSeekService, 
-    VocabSeedService, 
-    TextbookService, 
+    JwtGuard,
+    VocabService,
+    DeepSeekService,
+    VocabSeedService,
+    TextbookService,
     ProgressService,
     LearningSchedulerService,
     QuestionGeneratorService
   ],
   exports: [
-    LearningSchedulerService,
-    QuestionGeneratorService
-  ]
+ VocabService, //2026-06-09 C-Phase2:词库体检 admin复用 isDirtyGradeDefinition
+ LearningSchedulerService,
+ QuestionGeneratorService
+] 
 })
 export class LearningModule { }
