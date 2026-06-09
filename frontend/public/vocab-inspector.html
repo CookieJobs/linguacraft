@@ -26,7 +26,10 @@
     .loader { border:3px solid #e5e7eb; border-top-color:#6366f1; border-radius:50%; width:32px; height:32px; animation:spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .field-missing { background:#fee2e2; color:#991b1b; }
-    .field-ok { background:#f3f4f6; color:#374151; }
+ .field-ok { background:#f3f4f6; color:#374151; }
+ .chip-fallback { background:#fef3c7; color:#92400e; cursor:pointer; }
+ .chip-fallback:hover { background:#fde68a; }
+ .chip-dirty { background:#fee2e2; color:#991b1b; }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -57,7 +60,7 @@
     <div id="status" class="mb-4"></div>
 
     <!-- KPI 卡片 -->
-    <div id="kpi" class="hidden grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+    <div id="kpi" class="hidden grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"></div>
 
     <!-- 完整度概览 -->
     <div id="overview" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"></div>
@@ -108,9 +111,14 @@
         </div>
       </div>
       <div class="mt-3 pt-3 border-t border-slate-100">
-        <label class="text-xs text-slate-500 mr-2">缺失字段 (多选):</label>
-        <div id="f-missing" class="inline-flex flex-wrap gap-1.5"></div>
-      </div>
+ <label class="text-xs text-slate-500 mr-2">缺失字段 (多选):</label>
+ <div id="f-missing" class="inline-flex flex-wrap gap-1.5"></div>
+ <label class="text-xs text-slate-500 ml-4 mr-2">分级释义:</label>
+ <label class="inline-flex items-center gap-1 text-xs cursor-pointer bg-amber-100 px-2 py-0.5 rounded hover:bg-amber-200">
+ <input type="checkbox" id="f-fallback" class="f-fallback-cb" />
+ <span>只看有 fallback</span>
+ </label>
+ </div>
     </div>
 
     <!-- 表格 -->
@@ -133,8 +141,9 @@
               <div>中文释义<span id="zh-col-suffix"></span></div>
               <div>英文释义</div>
               <div>例句</div>
-              <div>IPA</div>
-            </div>
+  <div>IPA</div>
+ <div>Fallback</div>
+ </div>
           </div>
           <div id="tbody"></div>
         </div>
@@ -146,12 +155,12 @@
   <script>
   // ============== 状态 ==============
   const STATE = {
-    data: null,        // { total, summary, words }
-    filtered: [],      // 当前筛选结果
-    page: 0,
-    pageSize: 50,
-    f: { q: '', levels: new Set(), cefr: '', missing: new Set(), sort: 'completeness-asc', viewLevel: 'all' }
-  }
+ data: null, //{ total, summary, words }
+ filtered: [], // 当前筛选结果
+ page:0,
+ pageSize:50,
+ f: { q: '', levels: new Set(), cefr: '', missing: new Set(), fallbackOnly: false, sort: 'completeness-asc', viewLevel: 'all' }
+ }
 
   const LEVELS = ['Primary', 'Middle', 'High', 'University', 'Professional', 'CET4', 'CET6']
   // levels 大写 -> definitions key 小写
@@ -217,75 +226,102 @@
   }
 
   function renderKPI() {
-    const s = STATE.data.summary
-    const el = document.getElementById('kpi')
-    el.classList.remove('hidden')
-    const topLevel = Object.entries(s.byLevel).sort((a,b) => b[1]-a[1])[0]
-    const worstField = Object.entries(s.fieldMissing).sort((a,b) => b[1]-a[1])[0]
-    const cards = [
-      { label: '总词数', value: STATE.data.total, accent: 'text-slate-800' },
-      { label: '平均完整度', value: s.avgCompleteness + '%', accent: s.avgCompleteness > 80 ? 'text-emerald-600' : s.avgCompleteness > 50 ? 'text-amber-600' : 'text-red-600' },
-      { label: '真实例句占比', value: s.realExamplePct + '%', accent: 'text-indigo-600', sub: `${s.realExampleCount} / ${STATE.data.total}` },
-      { label: '最大学段', value: topLevel ? `${topLevel[0]} (${topLevel[1]})` : '-', accent: 'text-purple-600' }
-    ]
-    el.innerHTML = cards.map(c => `
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-xs text-slate-500">${c.label}</div>
-        <div class="text-2xl font-semibold ${c.accent} mt-1">${c.value}</div>
-        ${c.sub ? `<div class="text-xs text-slate-400 mt-0.5">${c.sub}</div>` : ''}
-      </div>
-    `).join('')
-  }
+ const s = STATE.data.summary
+ const el = document.getElementById('kpi')
+ el.classList.remove('hidden')
+ const topLevel = Object.entries(s.byLevel).sort((a,b) => b[1]-a[1])[0]
+ const fb = s.fallbackStats || { totalFallbackFields:0, affectedWords:0, affectedPct:0 }
+ const fbAccent = fb.totalFallbackFields ===0 ? 'text-emerald-600' : fb.affectedPct <5 ? 'text-amber-600' : 'text-red-600'
+ const cards = [
+ { label: '总词数', value: STATE.data.total, accent: 'text-slate-800' },
+ { label: '平均完整度', value: s.avgCompleteness + '%', accent: s.avgCompleteness >80 ? 'text-emerald-600' : s.avgCompleteness >50 ? 'text-amber-600' : 'text-red-600' },
+ { label: '真实例句占比', value: s.realExamplePct + '%', accent: 'text-indigo-600', sub: `${s.realExampleCount} / ${STATE.data.total}` },
+ { label: '最大学段', value: topLevel ? `${topLevel[0]} (${topLevel[1]})` : '-', accent: 'text-purple-600' },
+ { label: 'Fallback命中', value: fb.totalFallbackFields + ' 个', accent: fbAccent, sub: `${fb.affectedWords}词受影响 (${fb.affectedPct}%)` }
+ ]
+ el.innerHTML = cards.map(c => `
+ <div class="bg-white border border-slate-200 rounded-lg p-4">
+ <div class="text-xs text-slate-500">${c.label}</div>
+ <div class="text-2xl font-semibold ${c.accent} mt-1">${c.value}</div>
+ ${c.sub ? `<div class="text-xs text-slate-400 mt-0.5">${c.sub}</div>` : ''}
+ </div>
+ `).join('')
+ }
 
   function renderOverview() {
-    const el = document.getElementById('overview')
-    el.classList.remove('hidden')
-    const s = STATE.data.summary
-    const total = STATE.data.total
+ const el = document.getElementById('overview')
+ el.classList.remove('hidden')
+ const s = STATE.data.summary
+ const total = STATE.data.total
 
-    // 字段覆盖率横条
-    const fieldBars = Object.entries(s.fieldMissing).map(([k, n]) => {
-      const present = total - n
-      const pct = total > 0 ? (present / total) * 100 : 0
-      const color = pct < 30 ? 'bg-red-500' : pct < 70 ? 'bg-amber-500' : 'bg-emerald-500'
-      return `<div class="flex items-center gap-2 text-xs">
-        <div class="w-24 text-slate-600">${k}</div>
-        <div class="flex-1 bar-track"><div class="bar-fill ${color}" style="width:${pct.toFixed(1)}%"></div></div>
-        <div class="w-20 text-right tabular-nums text-slate-500">${present}/${total} (${pct.toFixed(0)}%)</div>
-      </div>`
-    }).join('')
+ //字段覆盖率横条
+ const fieldBars = Object.entries(s.fieldMissing).map(([k, n]) => {
+ const present = total - n
+ const pct = total >0 ? (present / total) *100 :0
+ const color = pct <30 ? 'bg-red-500' : pct <70 ? 'bg-amber-500' : 'bg-emerald-500'
+ return `<div class="flex items-center gap-2 text-xs">
+ <div class="w-24 text-slate-600">${k}</div>
+ <div class="flex-1 bar-track"><div class="bar-fill ${color}" style="width:${pct.toFixed(1)}%"></div></div>
+ <div class="w-20 text-right tabular-nums text-slate-500">${present}/${total} (${pct.toFixed(0)}%)</div>
+ </div>`
+ }).join('')
 
-    // 按学段完整度
-    const levelHealth = LEVELS.map(lv => {
-      const subset = STATE.data.words.filter(w => w.levels.includes(lv))
-      if (subset.length === 0) return ''
-      const avgC = subset.reduce((s, w) => s + w.completeness, 0) / subset.length
-      const realEx = subset.filter(w => !w.isDummyExample && w.exampleEn).length
-      const color = avgC > 80 ? 'text-emerald-600' : avgC > 50 ? 'text-amber-600' : 'text-red-600'
-      return `<tr class="border-t border-slate-100">
-        <td class="py-1.5 pr-3 text-slate-700">${lv}</td>
-        <td class="py-1.5 pr-3 text-right tabular-nums">${subset.length}</td>
-        <td class="py-1.5 pr-3 text-right tabular-nums ${color}">${avgC.toFixed(1)}%</td>
-        <td class="py-1.5 pr-3 text-right tabular-nums">${realEx} (${((realEx/subset.length)*100).toFixed(0)}%)</td>
-      </tr>`
-    }).join('')
+ // 按学段完整度
+ const levelHealth = LEVELS.map(lv => {
+ const subset = STATE.data.words.filter(w => w.levels.includes(lv))
+ if (subset.length ===0) return ''
+ const avgC = subset.reduce((s, w) => s + w.completeness,0) / subset.length
+ const realEx = subset.filter(w => !w.isDummyExample && w.exampleEn).length
+ const color = avgC >80 ? 'text-emerald-600' : avgC >50 ? 'text-amber-600' : 'text-red-600'
+ return `<tr class="border-t border-slate-100">
+ <td class="py-1.5 pr-3 text-slate-700">${lv}</td>
+ <td class="py-1.5 pr-3 text-right tabular-nums">${subset.length}</td>
+ <td class="py-1.5 pr-3 text-right tabular-nums ${color}">${avgC.toFixed(1)}%</td>
+ <td class="py-1.5 pr-3 text-right tabular-nums">${realEx} (${((realEx/subset.length)*100).toFixed(0)}%)</td>
+ </tr>`
+ }).join('')
 
-    el.innerHTML = `
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-sm font-medium text-slate-700 mb-3">🩺 字段覆盖率</div>
-        <div class="space-y-2">${fieldBars}</div>
-      </div>
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-sm font-medium text-slate-700 mb-3">🎓 按学段完整度</div>
-        <table class="w-full text-xs">
-          <thead class="text-slate-500">
-            <tr><th class="text-left pb-1.5">学段</th><th class="text-right pb-1.5">词数</th><th class="text-right pb-1.5">完整度</th><th class="text-right pb-1.5">真实例句</th></tr>
-          </thead>
-          <tbody>${levelHealth}</tbody>
-        </table>
-      </div>
-    `
-  }
+ // Fallback按学段分布
+ const fb = s.fallbackStats || { byGrade: {}, sampleWords: [] }
+ const fbByGrade = DEF_LEVELS.map(k => {
+ const n = fb.byGrade[k] ||0
+ if (n ===0) return ''
+ return `<div class="flex items-center gap-2 text-xs">
+ <div class="w-24 text-slate-600">${k}</div>
+ <div class="flex-1 bar-track"><div class="bar-fill bg-amber-500" style="width:${Math.min(100, n/10).toFixed(1)}%"></div></div>
+ <div class="w-20 text-right tabular-nums text-amber-700">${n}脏字段</div>
+ </div>`
+ }).join('')
+ const fbSample = (fb.sampleWords || []).slice(0,8).map(s => `
+ <div class="flex items-baseline gap-2 text-xs py-0.5">
+ <span class="font-mono text-slate-700 w-24 truncate">${escapeHtml(s.headword)}</span>
+ <span class="chip chip-cefr-${(s.cefr||'unknown').toLowerCase()}">${escapeHtml(s.cefr || '?')}</span>
+ <span class="text-red-600">${(s.dirty||[]).map(d=>`<span class="chip chip-dirty ml-1">${d}</span>`).join('')}</span>
+ <span class="text-slate-500 truncate flex-1" title="${escapeAttr(s.fallback || '')}">→ ${escapeHtml(s.fallback || '(空)')}</span>
+ </div>
+`).join('')
+
+ el.innerHTML = `
+ <div class="bg-white border border-slate-200 rounded-lg p-4">
+ <div class="text-sm font-medium text-slate-700 mb-3">🩺字段覆盖率</div>
+ <div class="space-y-2">${fieldBars}</div>
+ </div>
+ <div class="bg-white border border-slate-200 rounded-lg p-4">
+ <div class="text-sm font-medium text-slate-700 mb-3">🎓 按学段完整度</div>
+ <table class="w-full text-xs">
+ <thead class="text-slate-500">
+ <tr><th class="text-left pb-1.5">学段</th><th class="text-right pb-1.5">词数</th><th class="text-right pb-1.5">完整度</th><th class="text-right pb-1.5">真实例句</th></tr>
+ </thead>
+ <tbody>${levelHealth}</tbody>
+ </table>
+ </div>
+ <div class="bg-white border border-slate-200 rounded-lg p-4">
+ <div class="text-sm font-medium text-slate-700 mb-3">⚠️ 分级释义 Fallback命中${fb.totalFallbackFields ? ` <span class="ml-2 text-xs text-amber-700">${fb.totalFallbackFields}脏字段 · ${fb.affectedWords}词</span>` : ' <span class="ml-2 text-xs text-emerald-600">无脏数据</span>'}</div>
+ <div class="space-y-2 mb-3">${fbByGrade || '<div class="text-xs text-slate-400">—</div>'}</div>
+ ${fbSample ? `<div class="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">Top ${Math.min(8, (fb.sampleWords||[]).length)} 示例:</div><div class="space-y-1">${fbSample}</div>` : ''}
+ </div>
+ `
+ }
 
   function renderFilters() {
     const el = document.getElementById('filters')
@@ -313,35 +349,47 @@
       </label>
     `).join('')
     fMissing.querySelectorAll('.f-missing-cb').forEach(cb => {
-      cb.addEventListener('change', e => {
-        if (e.target.checked) STATE.f.missing.add(e.target.value); else STATE.f.missing.delete(e.target.value)
-        applyFilter()
-      })
-    })
-  }
+ cb.addEventListener('change', e => {
+ if (e.target.checked) STATE.f.missing.add(e.target.value); else STATE.f.missing.delete(e.target.value)
+ applyFilter()
+ })
+ })
+ // fallback filter
+ const fbCb = document.getElementById('f-fallback')
+ if (fbCb) {
+ fbCb.checked = STATE.f.fallbackOnly
+ fbCb.addEventListener('change', e => {
+ STATE.f.fallbackOnly = e.target.checked
+ applyFilter()
+ })
+ }
+ }
 
   function applyFilter() {
-    if (!STATE.data) return
-    const { q, levels, cefr, missing, sort } = STATE.f
-    const ql = q.trim().toLowerCase()
-    let arr = STATE.data.words.filter(w => {
-      if (ql) {
-        const hay = (w.headword + ' ' + (w.definitionZh||'') + ' ' + (w.definitionEn||'')).toLowerCase()
-        if (!hay.includes(ql)) return false
-      }
-      if (levels.size > 0) {
-        if (!w.levels.some(lv => levels.has(lv))) return false
-      }
-      if (cefr && (w.cefr || '').toUpperCase() !== cefr.toUpperCase()) return false
-      if (missing.size > 0) {
-        for (const m of missing) {
-          // dummy 例句也算缺 exampleEn
-          const actualMissing = m === 'exampleEn' ? (w.isDummyExample || !w.exampleEn) : w.missingFields.includes(m)
-          if (!actualMissing) return false
-        }
-      }
-      return true
-    })
+ if (!STATE.data) return
+ const { q, levels, cefr, missing, fallbackOnly, sort } = STATE.f
+ constql = q.trim().toLowerCase()
+ let arr = STATE.data.words.filter(w => {
+ if (ql) {
+ const hay = (w.headword + ' ' + (w.definitionZh||'') + ' ' + (w.definitionEn||'')).toLowerCase()
+ if (!hay.includes(ql)) return false
+ }
+ if (levels.size >0) {
+ if (!w.levels.some(lv => levels.has(lv))) return false
+ }
+ if (cefr && (w.cefr || '').toUpperCase() !== cefr.toUpperCase()) return false
+ if (missing.size >0) {
+ for (const m of missing) {
+ // dummy例句也算缺 exampleEn
+ const actualMissing = m === 'exampleEn' ? (w.isDummyExample || !w.exampleEn) : w.missingFields.includes(m)
+ if (!actualMissing) return false
+ }
+ }
+ if (fallbackOnly) {
+ if (!w.fallbackGrades || w.fallbackGrades.length ===0) return false
+ }
+ return true
+ })
     // 排序
     arr.sort((a, b) => {
       switch (sort) {
@@ -514,15 +562,15 @@
   document.getElementById('f-cefr').addEventListener('change', e => { STATE.f.cefr = e.target.value; applyFilter() })
   document.getElementById('f-sort').addEventListener('change', e => { STATE.f.sort = e.target.value; applyFilter() })
   document.getElementById('f-viewlevel').addEventListener('change', e => { STATE.f.viewLevel = e.target.value; renderTable() })
-  document.getElementById('f-reset').addEventListener('click', () => {
-    STATE.f = { q: '', levels: new Set(), cefr: '', missing: new Set(), sort: 'completeness-asc', viewLevel: 'all' }
-    document.getElementById('f-q').value = ''
-    document.getElementById('f-cefr').value = ''
-    document.getElementById('f-sort').value = 'completeness-asc'
-    document.getElementById('f-viewlevel').value = 'all'
-    renderFilters()
-    applyFilter()
-  })
+    document.getElementById('f-reset').addEventListener('click', () => {
+ STATE.f = { q: '', levels: new Set(), cefr: '', missing: new Set(), fallbackOnly: false, sort: 'completeness-asc', viewLevel: 'all' }
+ document.getElementById('f-q').value = ''
+ document.getElementById('f-cefr').value = ''
+ document.getElementById('f-sort').value = 'completeness-asc'
+ document.getElementById('f-viewlevel').value = 'all'
+ renderFilters()
+ applyFilter()
+ })
 
   // 启动
   // 优先从 ?token=xxx 注入 (便于分享/截图)

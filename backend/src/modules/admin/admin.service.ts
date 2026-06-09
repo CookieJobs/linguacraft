@@ -206,6 +206,9 @@ export class AdminService {
   async getVocab() {
     const words = await this.vocabModel.find().lean()
 
+    // 学段 key 列表 (跟 vocab.service.levelToKey / question-generator 一致)
+    const GRADE_KEYS = ['primary', 'middle', 'high', 'cet4', 'cet6', 'university', 'professional']
+
     const enriched = words.map((w: any) => {
       const levels: string[] = w.levels || []
       const ce = w.cefr || 'UNKNOWN'
@@ -223,6 +226,16 @@ export class AdminService {
 
       const TOTAL_FIELDS = 7
       const completeness = +(((TOTAL_FIELDS - missingFields.length) / TOTAL_FIELDS) * 100).toFixed(1)
+
+      // 2026-06-09 C-Phase2: 标出每个词的哪些学段分级释义是"脏"的 (会 fallback 到 definitionZh)
+      const fallbackGrades: string[] = []
+      const defs = w.definitions || {}
+      for (const gk of GRADE_KEYS) {
+        const val = defs[gk]
+        if (val && val.trim() && this.isDirtyGradeDefinition(val, w.headword)) {
+          fallbackGrades.push(gk)
+        }
+      }
 
       return {
         id: String(w._id),
@@ -244,7 +257,10 @@ export class AdminService {
         contextualDefinitions: w.contextualDefinitions || [],
         isDummyExample: isDummyEx,
         missingFields,
-        completeness
+        completeness,
+        // C-Phase2: 哪些学段是脏的 (fallback 走的)
+        fallbackGrades,
+        fallback: fallbackGrades.length > 0
       }
     })
 
@@ -260,6 +276,11 @@ export class AdminService {
       definitionZh: 0, definitionEn: 0, exampleEn: 0, ipa: 0,
       audioUrl: 0, freqRank: 0, pos: 0
     }
+    // C-Phase2: fallback 统计
+    const fbByGrade: Record<string, number> = Object.fromEntries(GRADE_KEYS.map(k => [k, 0]))
+    let totalFallbackFields = 0
+    let affectedWords = 0
+    const sampleWords: Array<{ headword: string; grade: string; dirty: string; fallback: string }> = []
     for (const w of enriched) {
       const c = (w.cefr || 'UNKNOWN').toUpperCase()
       byCefr[c] = (byCefr[c] || 0) + 1
@@ -268,6 +289,20 @@ export class AdminService {
         const key = f.replace('(dummy)', '')
         if (fieldMissing[key] != null) fieldMissing[key]++
       }
+      // 累加 fallback 统计
+      for (const gk of w.fallbackGrades) {
+        fbByGrade[gk] = (fbByGrade[gk] || 0) + 1
+        totalFallbackFields++
+        if (sampleWords.length < 20) {
+          sampleWords.push({
+            headword: w.headword,
+            grade: gk,
+            dirty: w.definitions[gk] || '',
+            fallback: w.definitionZh || ''
+          })
+        }
+      }
+      if (w.fallbackGrades.length > 0) affectedWords++
     }
 
     return {
@@ -279,9 +314,39 @@ export class AdminService {
         realExamplePct,
         byCefr,
         byLevel,
-        fieldMissing
+        fieldMissing,
+        // C-Phase2: 体检页用的 fallback 命中统计
+        fallbackStats: {
+          totalFallbackFields,
+          affectedWords,
+          affectedPct: TOTAL > 0 ? +((affectedWords / TOTAL) * 100).toFixed(2) : 0,
+          byGrade: fbByGrade,
+          sampleWords
+        }
       },
       words: enriched
     }
+  }
+
+  /**
+   * 检测分级释义是否"脏" — 跟 vocab.service.isDirtyGradeDefinition 保持一致
+   * (2026-06-09 C-Phase2 词库体检用)
+   * 这里 inline 一份而不是 import VocabService: 避免 admin module 导入 learning module
+   * 造成循环依赖 (admin 已经在 app.module 链里)。
+   * 同步规则: 跟 vocab.service 的检测函数完全一致,改了要两边都改
+   */
+  private isDirtyGradeDefinition(value: string, headword: string): boolean {
+    if (!value || !value.trim()) return false
+    const v = value.trim()
+    if (/\|\|/.test(v)) return false
+    if (/\d+\.\s/.test(v)) return false
+    if (/\[[a-zA-Zʃʒθðŋɪʊəɒæɛɔʌːə̯ɹɾθɡʔˈˌː.,\s\-]+\]/.test(v)) return true
+    if (/\/[a-zA-Zʃʒθðŋɪʊəɒæɛɔʌːə̯ɹɾθɡʔˈˌː.,\s\-]+\//.test(v)) return true
+    if (headword && headword.length >= 4) {
+      const re = new RegExp(`\\b${headword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      if (re.test(v)) return true
+    }
+    if (/[a-zA-Z]{3,}(\s+[a-zA-Z',.]{2,}){2,}/.test(v)) return true
+    return false
   }
 }
