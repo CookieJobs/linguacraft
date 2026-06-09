@@ -81,6 +81,10 @@ export class VocabService {
     return words.map(w => String(w.headword || '')).filter(Boolean)
   }
 
+  async getById(id: string): Promise<VocabWordDocument | null> {
+    return this.vocabModel.findById(id).exec()
+  }
+
   async getRandomDistractors(count: number, excludeId: string, level?: string): Promise<VocabWordDocument[]> {
     const query: any = { _id: { $ne: excludeId } }
     if (level) {

@@ -6,7 +6,6 @@ import { MailService } from './mail.service'
 import { RefreshTokenSchema } from './refresh-token.schema'
 import { UserSchema } from '../user/user.schema'
 import { JwtGuard } from '../../common/jwt.guard'
-import { redisProvider } from '../../common/redis.provider'
 import { PetModule } from '../pet/pet.module'
 import { WalletModule } from '../wallet/wallet.module'
 
@@ -20,6 +19,6 @@ import { WalletModule } from '../wallet/wallet.module'
     WalletModule
   ],
   controllers: [AuthController],
-  providers: [AuthService, MailService, redisProvider, JwtGuard]
+  providers: [AuthService, MailService, JwtGuard]
 })
 export class AuthModule {}

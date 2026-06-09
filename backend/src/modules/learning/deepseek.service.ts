@@ -4,6 +4,7 @@
 // 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
 import { Injectable } from '@nestjs/common'
 import fetch from 'node-fetch'
+import { safeError, redact } from '../../common/redact'
 
 @Injectable()
 export class DeepSeekService {
@@ -42,7 +43,7 @@ export class DeepSeekService {
       const res = await this.callApi(messages)
       return this.parseJSON(res)
     } catch (e: any) {
-      console.error('Feedback generation failed:', e)
+      console.error('Feedback generation failed:', safeError(e))
       
       let errorMsg = 'API调用失败';
       if (e.message && e.message.includes('401')) {
@@ -110,13 +111,13 @@ export class DeepSeekService {
       })
       if (!res.ok) {
         const errText = await res.text()
-        console.error('DeepSeek API Error:', res.status, errText)
+        console.error('DeepSeek API Error:', res.status, redact(errText))
         throw new Error(`DeepSeek API Failed: ${res.status} ${errText}`)
       }
       const data = (await res.json()) as any
       return data?.choices?.[0]?.message?.content || ''
     } catch (e) {
-      console.error('DeepSeekService Call Failed:', e)
+      console.error('DeepSeekService Call Failed:', safeError(e))
       throw e
     }
   }
@@ -132,7 +133,7 @@ export class DeepSeekService {
       if (match) {
         try { return JSON.parse(match[0]) } catch { }
       }
-      console.error('Failed to parse JSON from AI response:', text)
+      console.error('Failed to parse JSON from AI response:', redact(text))
       throw new Error('Invalid JSON format from AI')
     }
   }

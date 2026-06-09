@@ -10,7 +10,7 @@ export interface QuestionOption {
 
 export interface QuestionPayload {
   wordId: string
-  type: 'choice' | 'quiz' | 'spelling'
+  type: 'choice' | 'quiz' | 'spelling' | 'sentence'
   questionText: string
   options?: QuestionOption[]
   answer?: string
@@ -30,6 +30,8 @@ export class QuestionGeneratorService {
       'High': 'high',
       'CET4': 'cet4',
       'CET6': 'cet6',
+      'University': 'cet4',     // 兜底：大学四六级与 CET4 释义策略相近
+      'Professional': 'cet6',   // 兜底：雅思托福与 CET6 释义策略相近
     }
     return map[level] || 'middle'
   }
@@ -90,36 +92,52 @@ export class QuestionGeneratorService {
        // Simple regex replacement of the headword (case insensitive)
        const escaped = word.headword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
        const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
-       
+
        // If the word is not found in example (sometimes happens due to lemma/form diff), fallback
        if (!regex.test(word.exampleEn)) {
           return this.generateChoiceQuestion(word, 'zh-en')
        }
 
        const questionText = word.exampleEn.replace(regex, '______')
-       
+
        // Distractors: other words from same level
        const distractors = await this.vocabService.getRandomDistractors(3, String(word._id), word.levels?.[0])
-       
+
        const options: QuestionOption[] = [
           { id: String(word._id), text: word.headword, isCorrect: true },
           ...distractors.map(d => ({
-            id: String(d._id),
-            text: d.headword,
-            isCorrect: false
+             id: String(d._id),
+             text: d.headword,
+             isCorrect: false
           }))
        ]
        options.sort(() => Math.random() - 0.5)
 
        return {
-         wordId: String(word._id),
-         type: 'quiz',
-         questionText: `${questionText}`,
-         options
+          wordId: String(word._id),
+          type: 'quiz',
+          questionText: `${questionText}`,
+          options
        }
     }
 
     // Fallback to choice if no example
     return this.generateChoiceQuestion(word, 'zh-en')
+  }
+
+  /**
+   * Stage 3 造句题:用户用目标词造一个英文句子
+   * - 不给选项,纯文本输入
+   * - 后端用 DeepSeek.evaluateSentence 判分
+   * - 答对算掌握,触发 WordMastery + +10 金币(沿用 scheduler 逻辑)
+   * - 答错 SRS 降 EF/reps(不降 stage,因为是已掌握)
+   */
+  async generateSentenceQuestion(word: VocabWordDocument): Promise<QuestionPayload> {
+    return {
+      wordId: String(word._id),
+      type: 'sentence',
+      // 简短中文指令,SentenceQuestion 组件会用 question.word.definition 做更细展示
+      questionText: `请用 "${word.headword}" 造一个英文句子`
+    }
   }
 }

@@ -201,4 +201,87 @@ export class AdminService {
     await this.userModel.findByIdAndUpdate(userId, { $set: { isAdmin } })
     return { ok: true, userId, isAdmin }
   }
+
+  // 词库体检：拉全量词 + 派生"完整度"指标
+  async getVocab() {
+    const words = await this.vocabModel.find().lean()
+
+    const enriched = words.map((w: any) => {
+      const levels: string[] = w.levels || []
+      const ce = w.cefr || 'UNKNOWN'
+      const isMissing = (s: any) => !s || (typeof s === 'string' && s.trim() === '')
+      const isDummyEx = !!w.exampleEn && w.exampleEn.startsWith('Example for ') && w.exampleEn.includes(w.headword)
+      const missingFields: string[] = []
+      if (isMissing(w.definitionZh)) missingFields.push('definitionZh')
+      if (isMissing(w.definitionEn)) missingFields.push('definitionEn')
+      if (isMissing(w.exampleEn)) missingFields.push('exampleEn')
+      if (isMissing(w.ipa)) missingFields.push('ipa')
+      if (isMissing(w.audioUrl)) missingFields.push('audioUrl')
+      if (w.freqRank == null) missingFields.push('freqRank')
+      if (isMissing(w.pos)) missingFields.push('pos')
+      if (isDummyEx) missingFields.push('exampleEn(dummy)')
+
+      const TOTAL_FIELDS = 7
+      const completeness = +(((TOTAL_FIELDS - missingFields.length) / TOTAL_FIELDS) * 100).toFixed(1)
+
+      return {
+        id: String(w._id),
+        headword: w.headword,
+        lemma: w.lemma,
+        pos: w.pos || '',
+        cefr: ce,
+        freqRank: w.freqRank ?? null,
+        definitionEn: w.definitionEn || '',
+        definitionZh: w.definitionZh || '',
+        exampleEn: w.exampleEn || '',
+        ipa: w.ipa || '',
+        audioUrl: w.audioUrl || '',
+        levels,
+        topics: w.topics || [],
+        textbooks: w.textbooks || [],
+        source: w.source || '',
+        definitions: w.definitions || {},
+        contextualDefinitions: w.contextualDefinitions || [],
+        isDummyExample: isDummyEx,
+        missingFields,
+        completeness
+      }
+    })
+
+    // 全局统计
+    const TOTAL = enriched.length
+    const completenessSum = enriched.reduce((s, w) => s + w.completeness, 0)
+    const avgCompleteness = TOTAL > 0 ? +(completenessSum / TOTAL).toFixed(1) : 0
+    const realExampleCount = enriched.filter(w => !w.isDummyExample && w.exampleEn).length
+    const realExamplePct = TOTAL > 0 ? +((realExampleCount / TOTAL) * 100).toFixed(1) : 0
+    const byCefr: Record<string, number> = {}
+    const byLevel: Record<string, number> = {}
+    const fieldMissing: Record<string, number> = {
+      definitionZh: 0, definitionEn: 0, exampleEn: 0, ipa: 0,
+      audioUrl: 0, freqRank: 0, pos: 0
+    }
+    for (const w of enriched) {
+      const c = (w.cefr || 'UNKNOWN').toUpperCase()
+      byCefr[c] = (byCefr[c] || 0) + 1
+      for (const lv of w.levels) byLevel[lv] = (byLevel[lv] || 0) + 1
+      for (const f of w.missingFields) {
+        const key = f.replace('(dummy)', '')
+        if (fieldMissing[key] != null) fieldMissing[key]++
+      }
+    }
+
+    return {
+      total: TOTAL,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        avgCompleteness,
+        realExampleCount,
+        realExamplePct,
+        byCefr,
+        byLevel,
+        fieldMissing
+      },
+      words: enriched
+    }
+  }
 }

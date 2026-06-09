@@ -101,4 +101,59 @@ export class ProgressService {
             list
         }
     }
+
+    /**
+     * 错题本: 返回用户答错过但未掌握的单词列表
+     * 判定: wrongCount > 0 && stage < 3
+     * 排序: wrongCount DESC, lastPracticedAt DESC
+     * 支持按 level/textbook 过滤
+     */
+    async getWrongWords(userId: string, level?: string, textbook?: string, limit = 200) {
+        const match: any = {
+            userId: new Types.ObjectId(userId),
+            wrongCount: { $gt: 0 },
+            stage: { $lt: 3 }
+        }
+
+        // 先拿符合条件的 progress
+        const progresses = await this.userWordProgressModel
+            .find(match)
+            .sort({ wrongCount: -1, lastPracticedAt: -1 })
+            .limit(limit)
+            .lean()
+
+        if (progresses.length === 0) return []
+
+        // 关联 VocabWord
+        const wordIds = progresses.map(p => p.wordId)
+        const vocabQuery: any = { _id: { $in: wordIds } }
+        if (level) vocabQuery.levels = level
+        if (textbook) vocabQuery.textbooks = textbook
+
+        const words = await this.vocabModel.find(vocabQuery).lean()
+        const wordMap = new Map(words.map(w => [String(w._id), w]))
+
+        // 过滤掉按 level/textbook 过滤后不存在的词,合并返回
+        return progresses
+            .map(p => {
+                const w = wordMap.get(String(p.wordId))
+                if (!w) return null
+                return {
+                    wordId: String(p.wordId),
+                    word: w.headword,
+                    definition: w.definitionZh,
+                    partOfSpeech: w.pos,
+                    example: w.exampleEn,
+                    audioUrl: w.audioUrl,
+                    wrongCount: p.wrongCount,
+                    lastWrongAt: p.lastPracticedAt,
+                    stage: p.stage,
+                    consecutiveCorrect: p.consecutiveCorrect,
+                    nextReviewAt: p.nextReviewAt,
+                    cefr: w.cefr,
+                    levels: w.levels
+                }
+            })
+            .filter((x): x is NonNullable<typeof x> => x !== null)
+    }
 }

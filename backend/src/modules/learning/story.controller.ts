@@ -4,6 +4,7 @@
 // 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
 import { Body, Controller, Post, UseGuards } from '@nestjs/common'
 import { JwtGuard } from '../../common/jwt.guard'
+import { safeError } from '../../common/redact'
 import { DeepSeekService } from './deepseek.service'
 
 @Controller('story')
@@ -26,7 +27,7 @@ export class StoryController {
             const result = await this.deepseek.generateStory(safeList)
             return result // result is already { story, translation }
         } catch (e) {
-            console.error('Story Generation Error:', e)
+            console.error('Story Generation Error:', safeError(e))
             throw e
         }
     }

@@ -43,7 +43,7 @@ export class LearningSchedulerService {
 
   async submitAnswer(userId: string, wordId: string, isCorrect: boolean, userSentence?: string) {
     const now = new Date()
-    
+
     let progress = await this.userWordProgressModel.findOne({
       userId: new Types.ObjectId(userId),
       wordId: new Types.ObjectId(wordId)
@@ -60,9 +60,18 @@ export class LearningSchedulerService {
         consecutiveCorrect: 0,
         wrongStreak: 0,
         lastPracticedAt: now,
-        nextReviewAt: now
+        nextReviewAt: now,
+        // SM-2 字段
+        easeFactor: 2.5,
+        interval: 0,
+        repetitions: 0
       })
     }
+
+    // 兼容旧数据(2026-06-08 之前没有 SM-2 字段的记录)
+    if (progress.easeFactor == null) progress.easeFactor = 2.5
+    if (progress.interval == null) progress.interval = 0
+    if (progress.repetitions == null) progress.repetitions = 0
 
     progress.exposureCount += 1
     progress.lastPracticedAt = now
@@ -79,12 +88,25 @@ export class LearningSchedulerService {
 
       const previousStage = progress.stage
 
-      // Progression Logic
-      if (progress.stage < 3 && progress.consecutiveCorrect >= 1) {
-        progress.stage += 1
+      // SM-2: 答对时 reps += 1, EF 微涨, interval 按 SM-2 公式算
+      // - reps==1: 1 天
+      // - reps==2: 6 天
+      // - reps>=3: 上一 interval * EF, 至少 1 天
+      progress.repetitions = (progress.repetitions || 0) + 1
+      progress.easeFactor = Math.min(2.8, (progress.easeFactor || 2.5) + 0.1) // 答对 EF 涨,上限 2.8
+
+      let sm2Interval: number
+      if (progress.repetitions === 1) sm2Interval = 1
+      else if (progress.repetitions === 2) sm2Interval = 6
+      else sm2Interval = Math.max(1, Math.round((progress.interval || 1) * progress.easeFactor))
+      progress.interval = sm2Interval
+
+      // Stage 升:跟 reps 对齐(每答对一次升一级,最多 3)
+      if (progress.stage < 3) {
+        progress.stage = Math.min(3, progress.repetitions)
       }
-      
-      // Mastery Logic: If stage increments from 2 to 3 OR (stays at 3 and userSentence is provided)
+
+      // Mastery Logic: stage 从 2 升到 3,或 (已经在 stage 3 且带 userSentence)
       const justMastered = previousStage === 2 && progress.stage === 3
       const updateMasteryWithSentence = progress.stage === 3 && !!userSentence
 
@@ -111,32 +133,32 @@ export class LearningSchedulerService {
             },
             { upsert: true, new: true }
           )
-          
+
           // Call Stats checkin
           await this.statsService.checkin(userId)
         }
       }
-      
-      // Calculate nextReviewAt
-      let days = 1
-      if (progress.stage === 1) days = 1
-      else if (progress.stage === 2) days = 3
-      else if (progress.stage === 3) days = 7
-      else days = 0.5 // stage 0 correct -> 12 hours? or 1 day. Let's use 1 day.
-      
-      if (progress.stage === 0) days = 1
 
-      progress.nextReviewAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+      // 用 SM-2 interval 算下次复习时间
+      progress.nextReviewAt = new Date(now.getTime() + sm2Interval * 24 * 60 * 60 * 1000)
 
     } else {
       progress.wrongCount += 1
       progress.consecutiveCorrect = 0
       progress.wrongStreak = (progress.wrongStreak || 0) + 1
+
+      // SM-2: 答错 reps 归 0, EF 衰减(下限 1.3), interval 重置 1 天
+      // (但 wrongStreak 累积 2 次才降 stage,跟原逻辑一致避免一次错就崩)
+      progress.repetitions = 0
+      progress.easeFactor = Math.max(1.3, (progress.easeFactor || 2.5) - 0.2)
+      progress.interval = 1
+
       if (progress.wrongStreak >= 2) {
-        progress.stage = Math.max(0, progress.stage - 1) // 降一级，不归零
+        progress.stage = Math.max(0, progress.stage - 1) // 降一级,不归零
         progress.wrongStreak = 0 // 重置连续答错计数
       }
-      progress.nextReviewAt = now // immediate review
+      // 答错:1 天后再来(给用户 1 天巩固时间,比原来的"立即"温和一点,SM-2 经典做法)
+      progress.nextReviewAt = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000)
     }
 
     return progress.save()

@@ -19,6 +19,11 @@ export class AdminController {
     return this.admin.getDashboard()
   }
 
+  @Get('vocab')
+  async vocab() {
+    return this.admin.getVocab()
+  }
+
   @Get('users')
   async users() {
     return this.admin.getUsers()

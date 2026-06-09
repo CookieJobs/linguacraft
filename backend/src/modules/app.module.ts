@@ -1,4 +1,4 @@
-// input: @nestjs/common, @nestjs/mongoose, ./auth/auth.module, ./learning/learning.module, ./stats/stats.module, ./user/user.module, ./health.controller
+// input: @nestjs/common, @nestjs/mongoose, ./auth/auth.module, ./learning/learning.module, ./stats/stats.module, ./user/user.module, ./health.controller, ../common/common.module
 // output: AppModule
 // pos: 系统/通用
 // 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
@@ -13,11 +13,12 @@ import { WalletModule } from './wallet/wallet.module'
 import { DebugModule } from './debug/debug.module'
 import { AdminModule } from './admin/admin.module'
 import { HealthController } from './health.controller'
+import { CommonModule } from '../common/common.module'
 
 const mongoUrl = process.env.MONGO_URL || 'mongodb://localhost:27017/linguacraft'
 
 @Module({
-  imports: [MongooseModule.forRoot(mongoUrl), AuthModule, LearningModule, UserModule, StatsModule, PetModule, WalletModule, DebugModule, AdminModule],
+  imports: [MongooseModule.forRoot(mongoUrl), CommonModule, AuthModule, LearningModule, UserModule, StatsModule, PetModule, WalletModule, DebugModule, AdminModule],
   controllers: [HealthController]
 })
 export class AppModule {}
