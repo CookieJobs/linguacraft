@@ -118,12 +118,11 @@ export const WrongWordsPage: React.FC = () => {
     loadWrongWords(); // 重练完刷一下列表
   };
 
+  // 暂未上线四级 / 六级 / 雅思托福词库,先隐藏对应筛选
   const levelOptions = [
     { value: 'Primary', label: '小学' },
     { value: 'Middle', label: '初中' },
     { value: 'High', label: '高中' },
-    { value: 'University', label: '四级' },
-    { value: 'Professional', label: '雅思托福' }
   ];
 
   const playAudio = (word: string) => {

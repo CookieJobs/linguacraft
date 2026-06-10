@@ -32,12 +32,11 @@ export const ReviewPage: React.FC = () => {
     }
   };
 
+  // 暂未上线四级 / 六级 / 雅思托福词库,先隐藏对应筛选
   const levelOptions = [
     { value: 'Primary', label: '小学' },
     { value: 'Middle', label: '初中' },
     { value: 'High', label: '高中' },
-    { value: 'University', label: '四级' },
-    { value: 'Professional', label: '六级' },
   ];
 
   // Convert stats list to MasteredItem format for ReviewList

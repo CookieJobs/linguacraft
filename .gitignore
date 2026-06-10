@@ -40,6 +40,7 @@ data/raw/
 # IDE session 缓存(都是 IDE 自己的依赖,不该进 git)
 .opencode/
 .trae/
+.mavis/
 
 # 历史 prisma SQLite(早期用过,已迁到 mongo)
 backend/prisma/

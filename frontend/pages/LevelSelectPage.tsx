@@ -21,12 +21,12 @@ export const LevelSelectPage: React.FC = () => {
     }, [currentTextbook]);
 
 
+    // 暂未上线四级 / 六级 / 雅思托福词库,先隐藏对应入口
+    // (数据准备好后加回 UNIVERSITY / PROFESSIONAL 两行即可)
     const levels = [
         { id: EducationLevel.PRIMARY, label: '小学', icon: '🌱', desc: '基础词汇与日常对话' },
         { id: EducationLevel.MIDDLE, label: '初中', icon: '🚀', desc: '进阶语法与常用表达' },
         { id: EducationLevel.HIGH, label: '高中', icon: '🎓', desc: '高考重点与复杂句式' },
-        { id: EducationLevel.UNIVERSITY, label: '四级', icon: '🏛️', desc: '四级词汇 · 核心进阶' },
-        { id: EducationLevel.PROFESSIONAL, label: '六级', icon: '💼', desc: '六级词汇 · 高阶提升' },
     ];
 
     return (
