@@ -296,7 +296,7 @@
  <div class="flex items-baseline gap-2 text-xs py-0.5">
  <span class="font-mono text-slate-700 w-24 truncate">${escapeHtml(s.headword)}</span>
  <span class="chip chip-cefr-${(s.cefr||'unknown').toLowerCase()}">${escapeHtml(s.cefr || '?')}</span>
- <span class="text-red-600">${(s.dirty||[]).map(d=>`<span class="chip chip-dirty ml-1">${d}</span>`).join('')}</span>
+  <span class="text-red-600"><span class="chip chip-dirty ml-1" title="${escapeAttr(s.dirty || '')}">${escapeHtml((s.dirty || '').slice(0, 40))}</span></span>
  <span class="text-slate-500 truncate flex-1" title="${escapeAttr(s.fallback || '')}">→ ${escapeHtml(s.fallback || '(空)')}</span>
  </div>
 `).join('')
@@ -367,8 +367,8 @@
 
   function applyFilter() {
  if (!STATE.data) return
- const { q, levels, cefr, missing, fallbackOnly, sort } = STATE.f
- constql = q.trim().toLowerCase()
+  const { q, levels, cefr, missing, fallbackOnly, sort } = STATE.f
+  const ql = q.trim().toLowerCase()
  let arr = STATE.data.words.filter(w => {
  if (ql) {
  const hay = (w.headword + ' ' + (w.definitionZh||'') + ' ' + (w.definitionEn||'')).toLowerCase()
