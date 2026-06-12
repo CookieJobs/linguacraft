@@ -1,0 +1,85 @@
+# CI for linguacraft (2026-06-12 新增)
+#
+# 触发: push / pull_request to main
+# 跑法:
+#   - backend: tsc 编译 (typecheck) + jest (6 个 smoke test)
+#   - frontend: vite build (不跑 vitest, 那是 e2e 范围)
+# 5 分钟 timeout
+#
+# 服务依赖:
+#   - mongodb 6.0 service container (smoke test 要连)
+#   - 不需要 redis — RateLimitGuard 走 fail-open (rate-limit.guard.ts:85),
+#     Redis 不可用时不会让测试 hang 死
+#
+# 为什么不上传 artifact: 5min timeout + 简单 build, artifact 没必要
+# 为什么不用 cache: linguacraft 还没人 commit 频繁, cache 命中率低, 加上反而复杂
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: backend tsc + jest, frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    # MongoDB 6.0 service container — smoke test 用 mongod 做真 DB
+    # 用 healthcheck 等 mongo 真的 ready, 不然测试连不上会 race condition
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1})'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # 不开 cache (linguacraft 还没人 commit 频繁, cache 命中率低)
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # ============ BACKEND ============
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend typecheck (tsc)
+        working-directory: backend
+        run: npm run build
+
+      - name: Backend smoke test (jest)
+        working-directory: backend
+        env:
+          # smoke test 用 service container 的 mongo (localhost:27017)
+          # 测试文件内部用 Date.now() 生成唯一 db name (linguacraft_test_<ts>), 跑完 drop
+          # 这里 MONGO_URL 只需要告诉 AppModule 连 localhost
+          MONGO_URL: mongodb://localhost:27017/linguacraft_test
+          NODE_ENV: development
+          JWT_SECRET: ci_test_secret
+        run: npm test
+
+      # ============ FRONTEND ============
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend build (vite)
+        working-directory: frontend
+        # vitest 不在这里跑 — 那是 e2e / 组件测试范围, 上线前补的 smoke 是 backend 侧
+        # 跑 vitest 需要 jsdom + 大量 mock, CI 时间 + 复杂度上去, 但价值不匹配
+        run: npm run build

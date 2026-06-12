@@ -31,7 +31,20 @@
 使用根目录的 `docker-compose.yml` 可以一键启动 MongoDB、Redis 与后端 Backend 服务。请确保端口与环境变量一致（已统一为 `5500`）。
 
 ## 部署
+
 生产部署资产位于 `deploy/`，包含 `deploy/frontend/Dockerfile` 与 `deploy/backend/Dockerfile`，以及 NGINX 反向代理配置（上游为 `backend` 服务）。请根据实际域名与 TLS 证书调整 `deploy/nginx/nginx.conf`。
+
+## 测试
+
+`backend/src/__tests__/smoke.test.ts` 跑上线前 6 个 P0 检查 (health / admin auth / dev 旁路 / login 校验 / pickWords)。本地需要 MongoDB 27017 端口可用，**不需要** Redis（`RateLimitGuard` 走 fail-open）。
+
+```bash
+cd backend && npm install
+cd backend && npm test
+```
+
+CI 走 `.github/workflows/ci.yml`：push / PR to main 时跑 backend `tsc + jest` + frontend `vite build`，5 分钟 timeout，MongoDB 6.0 service container 跑测试。
+
 
 ## 📖 核心架构说明：词库与教材关系
 

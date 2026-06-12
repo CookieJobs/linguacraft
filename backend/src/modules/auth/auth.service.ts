@@ -65,7 +65,10 @@ export class AuthService {
 
       await this.redis.del(`verify:code:${email}`)
 
-      const isAdmin = process.env.ADMIN_EMAIL === email
+      // 2026-06-12: ADMIN_EMAIL 已从 .env 移除, prod 没有这条旁路
+      // dev 模式 (NODE_ENV !== 'production') 可通过临时环境变量启用, 不进 .env
+      const isAdmin =
+        process.env.NODE_ENV !== 'production' && process.env.ADMIN_EMAIL === email
       const hash = await argon2.hash(password)
       const user = await this.userModel.create({
         email,
@@ -89,7 +92,12 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('invalid_credentials')
     const ok = await argon2.verify(user.passwordHash, password)
     if (!ok) throw new UnauthorizedException('invalid_credentials')
-    if (process.env.ADMIN_EMAIL === email && !user.isAdmin) {
+    // 2026-06-12: 同上, prod 永不走 ADMIN_EMAIL 提权
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      process.env.ADMIN_EMAIL === email &&
+      !user.isAdmin
+    ) {
       await this.userModel.findByIdAndUpdate(user._id, { $set: { isAdmin: true } })
       user.isAdmin = true
     }

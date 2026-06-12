@@ -13,14 +13,27 @@
 //   这些是 class-level, 作用到所有方法。vocab-dev / audit-snapshot 要"无 auth 调",
 //   跟其他 admin endpoint 互斥, 必须放独立类。
 
-import { Controller, Get, ForbiddenException, Res } from '@nestjs/common'
+import { Controller, Get, ForbiddenException, OnModuleInit, Res } from '@nestjs/common'
 import type { Response } from 'express'
 import * as fs from 'fs'
 import { AdminService } from './admin.service'
 
 @Controller('admin')
-export class AdminDevController {
+export class AdminDevController implements OnModuleInit {
   constructor(private admin: AdminService) {}
+
+  /**
+   * 2026-06-12: 启动时 dev 旁路 warn, 方便从日志快速识别
+   * "该 prod 环境的日志里出现这行, 说明 NODE_ENV 没设 / 拼错了 — 立刻排查"
+   */
+  onModuleInit(): void {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[AdminDev] vocab-dev + audit-snapshot endpoints ENABLED (NODE_ENV=${process.env.NODE_ENV || 'undefined'})`,
+      )
+    }
+  }
 
   /**
    * 体检页实时数据 (dev-only, 无需 token)
