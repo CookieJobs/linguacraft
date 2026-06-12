@@ -65,21 +65,30 @@ export class RateLimitGuard implements CanActivate {
     // 任一身份超限即拒
     for (const id of identities) {
       const key = `rl:${opts.namespace}:${id}`
-      const count = await this.redis.incr(key)
-      if (count === 1) {
-        await this.redis.expire(key, opts.windowSec)
-      }
-      if (count > opts.limit) {
-        const ttl = await this.redis.ttl(key)
-        throw new HttpException(
-          {
-            message: 'rate_limited',
-            namespace: opts.namespace,
-            limit: opts.limit,
-            retryAfter: ttl > 0 ? ttl : opts.windowSec
-          },
-          HttpStatus.TOO_MANY_REQUESTS
-        )
+      try {
+        const count = await this.redis.incr(key)
+        if (count === 1) {
+          await this.redis.expire(key, opts.windowSec)
+        }
+        if (count > opts.limit) {
+          const ttl = await this.redis.ttl(key)
+          throw new HttpException(
+            {
+              message: 'rate_limited',
+              namespace: opts.namespace,
+              limit: opts.limit,
+              retryAfter: ttl > 0 ? ttl : opts.windowSec
+            },
+            HttpStatus.TOO_MANY_REQUESTS
+          )
+        }
+      } catch (e: any) {
+        // 2026-06-11: Redis 不可用时 fail-open, 不要让 rate-limit 把整个请求 hang 死
+        // 安全代价: Redis 挂了 = 不限流, 但服务还能用 (上次 Redis 死掉直接导致 login 15s 超时)
+        // 这个 trade-off 合理, 因为本地 dev 经常没起 Redis
+        if (e instanceof HttpException) throw e // 429 必须抛
+        console.warn(`[RateLimitGuard] redis 不可用, fail-open for ${opts.namespace}:${id}: ${e.message?.slice(0, 80)}`)
+        return true
       }
     }
     return true

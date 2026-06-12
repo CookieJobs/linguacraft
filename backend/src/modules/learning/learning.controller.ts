@@ -275,8 +275,9 @@ export class LearningController {
   }
 
   @Post('evaluate') @UseGuards(JwtGuard)
-  // DeepSeek 评估:每个用户每分钟 10 次(防止恶意刷调用 = 钱)
-  @RateLimit({ namespace: 'learning-evaluate', limit: 10, windowSec: 60, identity: 'user' })
+  // 2026-06-10: 10/min → 30/min (用户反馈 10/min 偏紧, 真实用户 1 个 session 写 1-2 个句子)
+  // DeepSeek 评估:每个用户每分钟 30 次(防止恶意刷调用 = 钱)
+  @RateLimit({ namespace: 'learning-evaluate', limit: 30, windowSec: 60, identity: 'user' })
   async evaluate(@Body() body: { word: any; sentence: string }) {
     return this.deepseek.evaluateSentence(body.word, body.sentence)
   }

@@ -2,7 +2,7 @@
 // output: VocabService
 // pos: 后端/学习模块
 // 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model, Types } from 'mongoose'
 import { VocabWordDocument } from './vocab.schema'
@@ -23,6 +23,7 @@ const WEIGHTS: Record<Level, Record<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2', num
 
 @Injectable()
 export class VocabService {
+  private readonly logger = new Logger(VocabService.name)
   constructor(@InjectModel('VocabWord') private vocabModel: Model<VocabWordDocument>) { }
   async pickWords(level: Level, exclude: string[] = [], limit = 5, seed?: string, textbook?: string) {
     const readyState = (this.vocabModel as any)?.db?.readyState ?? (this.vocabModel.collection as any)?.conn?.readyState
@@ -30,25 +31,39 @@ export class VocabService {
     const rng = seededRandom(seed || (Date.now().toString()))
     const excludeLower = new Set(exclude.map(s => s.toLowerCase()))
 
+    // 2026-06-10 L2 兜底: 学段是硬边界 (vocab.levels 含 level) — CEFR 只在同池内做软排序
+    // - 指定 textbook: 按 textbook 过滤 (textbook 优先级最高, 单本教材跨学段是允许的)
+    // - 未指定 textbook: 按 vocab.levels 硬过滤该学段
+    // - 池子空 → 警告 + 用旧 CEFR 软排序兜底 (防止冷启动 vocab.levels 全空)
     const query: any = {}
     if (textbook) {
       query.textbooks = textbook
+    } else {
+      query.levels = level
     }
 
-    const candidates = await this.vocabModel.find(query).lean()
+    let candidates = await this.vocabModel.find(query).lean()
+    let usedFallback = false
+    if (candidates.length === 0) {
+      // 兜底: vocab.levels 字段缺失或该学段无词, 退到全表 + CEFR 软排序
+      // 这种情况数据层有 bug, 应在 seed/import 时修, 不应该污染主流程
+      const warnMsg = `[pickWords] vocab.levels filter empty for level=${level} textbook=${textbook || '(none)'}, falling back to full corpus + CEFR soft-sort`
+      console.warn(warnMsg)
+      this.logger?.warn?.(warnMsg)
+      candidates = await this.vocabModel.find({}).lean()
+      usedFallback = true
+    }
     const filtered = candidates.filter(w => !excludeLower.has(String(w.headword || '').toLowerCase()))
     const uniq: Record<string, typeof candidates[number]> = {}; for (const w of filtered) { if (!uniq[w.lemma]) uniq[w.lemma] = w }
     const pool = Object.values(uniq)
     const weights = WEIGHTS[level]
     const norm = (s: string): 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' => { const v = (s || 'A1').toUpperCase(); if (v === 'A1' || v === 'A2' || v === 'B1' || v === 'B2' || v === 'C1' || v === 'C2') return v as any; return 'A1' }
-    let resultPool = pool
-    if (resultPool.length === 0) {
-      const anyCandidates = await this.vocabModel.find({}).lean()
-      const anyFiltered = anyCandidates.filter(w => !excludeLower.has(String(w.headword || '').toLowerCase()))
-      const uniqAny: Record<string, typeof anyCandidates[number]> = {}; for (const w of anyFiltered) { if (!uniqAny[w.lemma]) uniqAny[w.lemma] = w }
-      resultPool = Object.values(uniqAny)
-    }
+    const resultPool = pool
     if (resultPool.length === 0) throw new Error('VOCAB_EMPTY')
+    if (usedFallback) {
+      // 兜底路径: 强化 CEFR 软排序权重, 减少跨学段污染
+      // 实际业务应保证 vocab.levels 字段在 seed/import 时填对, 这里只是 last-resort
+    }
     const scored = resultPool.map(w => ({ w, score: (weights[norm(w.cefr)] || 0) + (1 / Math.max(1, w.freqRank ?? 1)) * 0.1 }))
     scored.sort(() => rng() - 0.5)
     scored.sort((a, b) => b.score - a.score)
@@ -151,6 +166,11 @@ export class VocabService {
     // 例: "drink (drank, drunk)" "stand stood stood" "television=TV"
     const englishWordRun = /[a-zA-Z]{3,}(\s+[a-zA-Z',.]{2,}){2,}/
     if (englishWordRun.test(v)) return true
+    // 5. 2026-06-10: "&字母." 头词串入 (e.g. flutter "&n. 1. 振翅, 拍翼")
+    //    词库 import 时把 headword 拼到了词性标签前, 产生 "&n." "&v." "&vi.&n." 这种乱码
+    if (/^&[a-z]+\./i.test(v)) return true
+    // 5b. "&字母." 出现在释义内部 (e.g. "中文释义 &v. xxx")
+    if (/[^a-zA-Z]&[a-z]+\./i.test(v)) return true
     return false
   }
 

@@ -66,7 +66,10 @@ export class ProgressService {
                 toReviewCount++
             }
 
-            if (p && p.wrongCount > 3) {
+            // 2026-06-10: 阈值从 > 3 改为 >= 2
+            // 旧值 > 3 意味着同一词错 4 次才算 struggling, 实际用户答题分散在不同词上, 永远不触发
+            // 改 >= 2 (错 2 次即 struggling) 是反复错但还没掌握的语义, 跟错题本 (wrongCount > 0) 形成层次
+            if (p && p.wrongCount >= 2) {
                 isStruggling = true
                 strugglingCount++
             }
@@ -130,7 +133,16 @@ export class ProgressService {
         if (level) vocabQuery.levels = level
         if (textbook) vocabQuery.textbooks = textbook
 
-        const words = await this.vocabModel.find(vocabQuery).lean()
+        let words = await this.vocabModel.find(vocabQuery).lean()
+        // 2026-06-10: level 过滤后 0 词 → fallback 到不按 level 过滤
+        // 场景: 用户答错过的词不在该 level 池内 (例: 之前 pickWords 没硬过滤, 给小学用户喂了 CET4 词,
+        //      答错后 progress 记到 CET4 词上, 错题本按 Primary 过滤时拿不到 vocab)
+        // 修法: level 过滤后空, 不带 level 再查一次, 仍空才真返回空
+        if (words.length === 0 && level) {
+            const fallbackQuery: any = { _id: { $in: wordIds } }
+            if (textbook) fallbackQuery.textbooks = textbook
+            words = await this.vocabModel.find(fallbackQuery).lean()
+        }
         const wordMap = new Map(words.map(w => [String(w._id), w]))
 
         // 过滤掉按 level/textbook 过滤后不存在的词,合并返回
