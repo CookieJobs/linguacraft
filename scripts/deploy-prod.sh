@@ -38,7 +38,18 @@ done
 # ---- 前置检查 ----
 [[ -d "$REPO_DIR" ]]   || err "仓库目录不存在: $REPO_DIR (设 REPO_DIR 或先 git clone)"
 [[ -d "$BACKEND_DIR" ]] || err "backend/ 不存在, 请确认仓库结构"
-[[ -f "$BACKEND_DIR/.env" ]] || err "backend/.env 不存在, 先 cp .env.production.example .env 并填好 4 个必填 (JWT_SECRET/ALLOWED_ORIGINS/MONGO_URL/DEEPSEEK_API_KEY)"
+
+# .env 缺失时自动从模板拷 (免部署者手敲 cp), 拷完停住让人填 4 个必填
+if [[ ! -f "$BACKEND_DIR/.env" ]]; then
+  if [[ -f "$BACKEND_DIR/.env.production.example" ]]; then
+    info ".env 缺失, 自动从 .env.production.example 拷一份, 填完 4 个必填再重跑"
+    cp "$BACKEND_DIR/.env.production.example" "$BACKEND_DIR/.env"
+    chmod 600 "$BACKEND_DIR/.env"
+    err "已生成 $BACKEND_DIR/.env, 用 nano 填 JWT_SECRET / DEEPSEEK_API_KEY / ALLOWED_ORIGINS / SMTP_*, 然后再跑一次 $0"
+  else
+    err ".env 不存在 + .env.production.example 也不存在, 请 git pull 拿最新代码"
+  fi
+fi
 command -v node  >/dev/null 2>&1 || err "node 没装"
 command -v npm   >/dev/null 2>&1 || err "npm 没装"
 command -v git   >/dev/null 2>&1 || err "git 没装"
