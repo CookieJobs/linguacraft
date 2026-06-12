@@ -104,8 +104,27 @@ CI 走 `.github/workflows/ci.yml`：push / PR to main 时跑 backend `tsc + jest
    curl http://localhost
    ```
 
-### 部署修复说明
-本次部署修复解决了以下问题：
+### 一键部署脚本（裸机 / VM 部署，不用 docker）
+
+仓库自带 `scripts/deploy-prod.sh`，服务器上准备一次后，每次发布跑一行：
+
+```bash
+# 首次：服务器准备好 mongo / redis / node 20+ / nginx，然后：
+cd /opt/linguacraft
+git clone https://github.com/CookieJobs/linguacraft.git .
+cd backend && cp .env.production.example .env && nano .env  # 填 JWT_SECRET/ALLOWED_ORIGINS/MONGO_URL/DEEPSEEK_API_KEY
+chmod 600 .env
+
+# 之后每次发布：
+sudo bash scripts/deploy-prod.sh
+# 跳过数据回填（schema 没改时）：  --skip-backfill
+# 跳过 smoke test：                  --skip-smoke
+# 改部署路径 / 服务名：              REPO_DIR=/srv/xxx SERVICE_NAME=xxx bash scripts/deploy-prod.sh
+```
+
+脚本会顺序：pull → 装依赖 → 编译后端 + 前端 build → 同步前端到 `$WEB_ROOT`（默认 `/var/www/linguacraft`）→ 跑 `backfill-schema-defaults` → `systemctl restart linguacraft-backend` → 跑 `smoke-test-prod.sh` 8/8。
+
+部署修复说明（v1.1.0 之前的旧 docker 方式，保留作为对比）：
 1. **Docker构建问题**：在 `backend/Dockerfile` 中添加了构建工具以支持原生模块
 2. **环境变量安全**：生产配置使用环境变量而非硬编码密钥
 3. **Nginx配置**：正确配置了前端服务端口 (5173)
