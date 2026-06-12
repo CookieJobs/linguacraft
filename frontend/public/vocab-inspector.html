@@ -38,7 +38,7 @@
     <header class="mb-6 flex items-end justify-between">
       <div>
         <h1 class="text-2xl font-semibold text-slate-800">📚 词库体检</h1>
-        <p class="text-sm text-slate-500 mt-1">linguacraft vocab inspector · 实时数据 · 来源 <code class="bg-slate-100 px-1 rounded">GET /api/admin/vocab</code></p>
+        <p class="text-sm text-slate-500 mt-1">linguacraft vocab inspector · 自动选源: <code class="bg-slate-100 px-1 rounded">/api/admin/vocab-dev</code> (无 token) → <code class="bg-slate-100 px-1 rounded">/api/admin/vocab</code> (需 token) → <code class="bg-slate-100 px-1 rounded">/api/admin/audit-snapshot</code> (本地快照)</p>
       </div>
       <div class="flex items-center gap-2">
         <button id="reload" class="text-sm bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50">重新加载</button>
@@ -182,27 +182,37 @@
   function setToken(t) { localStorage.setItem('vocabInspectorToken', t) }
   function clearToken() { localStorage.removeItem('vocabInspectorToken') }
 
+  // 2026-06-11: 三档数据源自动 fallback
+  //   1. /api/admin/vocab-dev (后端 dev 旁路, 无需 token, 仅 NODE_ENV !== 'production' 可用)
+  //   2. /api/admin/vocab (老 admin endpoint, 需要 admin token)
+  //   3. /api/admin/audit-snapshot (后端 serve 本地 audit 快照, 离线/无 token 兜底)
+  // 优先级: 1 > 2 > 3, 第一个返回 2xx 的就用
   async function loadVocab() {
     setStatus('loading', '加载词库中...')
-    const token = getToken()
-    if (!token) {
-      setStatus('error', '没有找到 admin token。点击右上角"设置 Token"粘贴 JWT。')
-      return
-    }
-    try {
-      const res = await fetch('/api/admin/vocab', { headers: { 'Authorization': 'Bearer ' + token } })
-      if (res.status === 401 || res.status === 403) {
-        setStatus('error', `鉴权失败 (${res.status})。请检查 token 是否是 admin 角色。`)
+    const sources = [
+      { name: 'dev-bypass', url: '/api/admin/vocab-dev', headers: {} },
+      { name: 'admin-token', url: '/api/admin/vocab', headers: { 'Authorization': 'Bearer ' + getToken() }, needsToken: true },
+      { name: 'local-snapshot', url: '/api/admin/audit-snapshot', headers: {} }
+    ]
+    for (const src of sources) {
+      if (src.needsToken && !getToken()) continue
+      try {
+        const res = await fetch(src.url, { headers: src.headers })
+        if (res.status === 401 || res.status === 403) continue
+        if (!res.ok) continue
+        const data = await res.json()
+        STATE.data = data
+        STATE.dataSource = src.name
+        const sourceLabel = src.name === 'dev-bypass' ? 'dev 旁路 (无 token)' : src.name === 'admin-token' ? 'admin token' : '本地快照'
+        setStatus('ok', `✅ 加载完成 · 数据源: ${sourceLabel} · 共 ${data.total} 词 · 生成于 ${new Date(data.generatedAt).toLocaleString()}`)
+        render()
         return
+      } catch (e) {
+        // 网络错误, 试下一个源
+        continue
       }
-      if (!res.ok) { setStatus('error', `HTTP ${res.status} ${res.statusText}`); return }
-      const data = await res.json()
-      STATE.data = data
-      setStatus('ok', `✅ 加载完成 · 共 ${data.total} 词 · 生成于 ${new Date(data.generatedAt).toLocaleString()}`)
-      render()
-    } catch (e) {
-      setStatus('error', '网络错误: ' + e.message)
     }
+    setStatus('error', '所有数据源都失败。需要至少一个: (1) 后端 dev 旁路 + 服务在跑 (2) admin token (3) 本地快照 /tmp/linguacraft-vocab-audit.json (跑 audit-vocab.ts 生成)')
   }
 
   function setStatus(kind, msg) {

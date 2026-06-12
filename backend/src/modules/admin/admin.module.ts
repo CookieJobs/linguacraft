@@ -1,10 +1,11 @@
 // input: @nestjs/common, @nestjs/mongoose, ./admin.controller, ./admin.service, ../user/user.schema, ../learning/user-word-progress.schema, ../learning/mastery.schema, ../learning/vocab.schema, ../stats/stats.schema, ../../common/admin.guard, ../../common/jwt.guard
 // output: AdminModule
 // pos: 后端/管理模块
-// 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
+// 若我被更新，请同步更新我的开头注释，以及所属文件夹的 README。
 import { Module } from '@nestjs/common'
 import { MongooseModule } from '@nestjs/mongoose'
 import { AdminController } from './admin.controller'
+import { AdminDevController } from './admin-dev.controller'
 import { AdminService } from './admin.service'
 import { UserSchema, UserProfileSchema } from '../user/user.schema'
 import { UserWordProgressSchema } from '../learning/user-word-progress.schema'
@@ -26,7 +27,7 @@ import { AdminGuard } from '../../common/admin.guard'
       { name: 'UserStats', schema: UserStatsSchema }
     ])
   ],
-  controllers: [AdminController],
+  controllers: [AdminController, AdminDevController],
   providers: [AdminService, JwtGuard, AdminGuard]
 })
 export class AdminModule {}
