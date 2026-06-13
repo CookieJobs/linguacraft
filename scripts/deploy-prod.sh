@@ -68,10 +68,10 @@ git fetch origin "$BRANCH" --prune
 git reset --hard "origin/$BRANCH"
 success "代码已同步到 origin/$BRANCH ($(git rev-parse --short HEAD))"
 
-# ---- 2. 装后端依赖 ----
-info "2/6 cd backend && npm ci --omit=dev"
+# ---- 2. 装后端依赖 (含 dev, tsc/ts-node 要用) ----
+info "2/6 cd backend && npm ci"
 cd "$BACKEND_DIR"
-npm ci --omit=dev
+npm ci
 success "后端依赖装完"
 
 # ---- 3. 编译后端 + 装前端依赖 + 构建前端 ----
