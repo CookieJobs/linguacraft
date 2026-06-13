@@ -76,7 +76,8 @@ success "后端依赖装完"
 
 # ---- 3. 编译后端 + 装前端依赖 + 构建前端 ----
 info "3/6 npm run build (后端) + 前端 build"
-npm run build
+# npm run 自动加 node_modules/.bin 到 PATH, 但 symlink 可能缺, 用 npx 兜底
+npm run build || npx tsc
 success "后端编译完"
 
 cd "$FRONTEND_DIR"
