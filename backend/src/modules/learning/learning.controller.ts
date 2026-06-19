@@ -105,9 +105,12 @@ export class LearningController {
       if (q) {
         q.progressId = String(item._id)
         const isDummyExample = word.exampleEn?.startsWith('Example for ') && word.exampleEn?.includes(word.headword);
+        // 2026-06-20: 没设 userLevel 时 fallback 改成 'Primary' (最简单档),
+        // 不再用 word.definitionZh (整段长翻译)
+        const wordLevel = userLevel || 'Primary'
         q.word = {
           word: word.headword,
-          definition: userLevel ? this.vocab.getGradeDefinition(word, userLevel) : word.definitionZh,
+          definition: this.vocab.getGradeDefinition(word, wordLevel),
           partOfSpeech: word.pos,
           example: isDummyExample ? '' : word.exampleEn,
           audioUrl: word.audioUrl
@@ -134,9 +137,11 @@ export class LearningController {
           const mode = Math.random() > 0.5 ? 'en-zh' : 'zh-en'
           const q: any = await this.questionGenerator.generateChoiceQuestion(w, mode, userLevel)
           const isDummyExample = w.exampleEn?.startsWith('Example for ') && w.exampleEn?.includes(w.headword);
+          // 2026-06-20: 同上, 没设 userLevel 时 fallback 到 'Primary'
+          const wordLevel = userLevel || 'Primary'
           q.word = {
             word: w.headword,
-            definition: userLevel ? this.vocab.getGradeDefinition(w, userLevel) : w.definitionZh,
+            definition: this.vocab.getGradeDefinition(w, wordLevel),
             partOfSpeech: w.pos,
             example: isDummyExample ? '' : w.exampleEn,
             audioUrl: w.audioUrl

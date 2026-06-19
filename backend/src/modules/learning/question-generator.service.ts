@@ -37,7 +37,11 @@ export class QuestionGeneratorService {
     mode: 'en-zh' | 'zh-en',
     userLevel?: string
   ): Promise<QuestionPayload> {
-    const level = userLevel || word.levels?.[0] || 'junior'
+    // 2026-06-20: 默认 fallback 改成 Primary (最简单档) 而不是 word.levels[0]
+    // 原因: 没设 userLevel 的用户多数是刚注册 / 还没填学段, 给小学档最安全
+    // 也避免 fallback 到 Middle/High (中学生档) 出现"a. 好的；有益的；愉快的" 这种
+    // 对低龄用户还是太复杂的释义
+    const level = userLevel || 'Primary'
     const distractors = await this.vocabService.getRandomDistractors(3, String(word._id), level)
 
     let questionText: string
