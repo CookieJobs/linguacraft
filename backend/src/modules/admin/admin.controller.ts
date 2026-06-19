@@ -1,13 +1,24 @@
 // input: @nestjs/common, ./admin.service, ../../common/admin.guard
 // output: AdminController, route:admin
 // pos: 后端/管理模块
-// 若我被更新，请同步更新我的开头注释，以及所属文件夹的 README。
-import { Controller, Get, Param, Put, Body, Req } from '@nestjs/common'
+// 若我被更新，请同步更新我的开头注释，以及所属的文件夹的 README。
+import { Controller, Get, Param, Put, Post, Body, Req } from '@nestjs/common'
 import { AdminService } from './admin.service'
 import { AdminAuth } from '../../common/admin.guard'
-import { IsBoolean } from 'class-validator'
+import { IsBoolean, IsArray, ValidateNested, IsString, IsObject, IsOptional } from 'class-validator'
+import { Type } from 'class-transformer'
 
 class SetAdminDto { @IsBoolean() isAdmin!: boolean }
+
+class ImportDefRecord {
+  @IsString() headword!: string
+  @IsString() @IsOptional() pos?: string
+  @IsObject() definitions!: Record<string, string>
+}
+class ImportDefDto {
+  @IsArray() @ValidateNested({ each: true }) @Type(() => ImportDefRecord)
+  records!: ImportDefRecord[]
+}
 
 @Controller('admin')
 @AdminAuth()
@@ -43,5 +54,16 @@ export class AdminController {
   @Put('users/:id/role')
   async setAdmin(@Param('id') id: string, @Body() body: SetAdminDto) {
     return this.admin.setAdmin(id, body.isAdmin)
+  }
+
+  /**
+   * 2026-06-20 一次性端点: 导入本地 Mongo 的 vocab definitions 到 prod
+   * 临时用, 同步完成后删除
+   * body: { records: [{ headword, pos?, definitions: { primary, middle, high, ... } }] }
+   * 单批 ≤ 500, 多了分批 POST
+   */
+  @Post('import-definitions')
+  async importDefinitions(@Body() body: ImportDefDto) {
+    return this.admin.importDefinitions(body.records)
   }
 }

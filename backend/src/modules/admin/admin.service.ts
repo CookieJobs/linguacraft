@@ -329,6 +329,71 @@ export class AdminService {
   }
 
   /**
+   * 2026-06-20 一次性导入端点: 本地 Mongo 词库 definitions 同步到 prod
+   *
+   * 触发场景: 本地跑过 enrich-grade-definitions.ts 后, 没把 Mongo 数据同步到 prod,
+   *          prod Primary 题的释义全退到长 definitionZh, 体验崩坏
+   *          (deploy-prod.sh 只同步代码, 不同步 Mongo)
+   *
+   * 设计:
+   * - 只覆盖 `definitions` 字段, 不动 definitionZh / levels / exampleEn / ipa / 等其他任何字段
+   * - 按 `headword` (case-insensitive) 配对, 不靠 _id (本地 prod 是不同 Mongo)
+   * - 不存在的 headword 记到 unmatched, 不创建新词
+   * - 一个 headword 多个 pos 记录会全更新 (跟本地 dedup-by-headword 一致)
+   * - 单批 ≤ 500 词, 总数无上限 (分批调用即可)
+   *
+   * 临时用, 跑完数据同步后可以删掉这个端点
+   */
+  async importDefinitions(records: Array<{ headword: string; pos?: string; definitions: Record<string, string> }>) {
+    if (!Array.isArray(records) || records.length === 0) {
+      return { matched: 0, modified: 0, unmatched: [], errors: [] }
+    }
+    if (records.length > 500) {
+      throw new Error(`batch_too_large: ${records.length} (max 500 per request, split into batches)`)
+    }
+
+    let matched = 0
+    let modified = 0
+    const unmatched: string[] = []
+    const errors: Array<{ headword: string; error: string }> = []
+
+    for (const rec of records) {
+      const hw = String(rec.headword || '').trim()
+      if (!hw) continue
+
+      // 只挑非空 def 字段写, 避免把 prod 已有值覆盖成空字符串
+      const setDefs: Record<string, string> = {}
+      for (const [k, v] of Object.entries(rec.definitions || {})) {
+        if (v && String(v).trim()) setDefs[`definitions.${k}`] = String(v)
+      }
+      if (Object.keys(setDefs).length === 0) {
+        unmatched.push(`${hw} (no non-empty def fields)`)
+        continue
+      }
+
+      try {
+        const filter: any = { headword: new RegExp(`^${hw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        if (rec.pos) filter.pos = rec.pos
+
+        // 先 count 看看有没有, 没就 skip
+        const cnt = await this.vocabModel.countDocuments(filter)
+        if (cnt === 0) {
+          unmatched.push(hw + (rec.pos ? ` (pos=${rec.pos})` : ''))
+          continue
+        }
+        matched += cnt
+
+        const r = await this.vocabModel.updateMany(filter, { $set: setDefs })
+        modified += r.modifiedCount || 0
+      } catch (e: any) {
+        errors.push({ headword: hw, error: e?.message || String(e) })
+      }
+    }
+
+    return { matched, modified, unmatched, errors, requested: records.length }
+  }
+
+  /**
    * 检测分级释义是否"脏" — 跟 vocab.service.isDirtyGradeDefinition 保持一致
    * (2026-06-09 C-Phase2 词库体检用)
    * 这里 inline 一份而不是 import VocabService: 避免 admin module 导入 learning module
