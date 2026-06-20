@@ -52,3 +52,6 @@ linguacraft_dump/
 # enrich 脚本的 API 缓存(下次跑会重生,推上去没用)
 data/processed/*_cache.json
 outputs/
+
+# Redis RDB dump (dev redis-server 自动生成的运行时产物)
+*.rdb
