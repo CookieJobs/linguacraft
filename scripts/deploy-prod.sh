@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# linguacraft 一键部署脚本 — 服务器上跑
-# 用法: sudo bash scripts/deploy-prod.sh [--skip-backfill] [--skip-smoke]
+# linguacraft 一键部署脚本 (docker compose 版)
+# 用法: sudo bash scripts/deploy-prod.sh [--skip-backfill] [--skip-smoke] [--recreate-frontend]
 #
-# 流程: pull -> 装依赖 -> 构建前端 -> 数据回填(可跳) -> 启服务 -> smoke test(可跳)
-# 前置: 服务器已装 mongodb / redis / node 20+ / nginx; backend/.env 已配好且 chmod 600
-# 可选: systemd 服务名 linguacraft-backend, 前端放 /var/www/linguacraft (nginx root)
+# 流程: pull → 前端 build → 同步前端 → docker compose build+up backend → 数据回填 → smoke test
+# 前置: 服务器已装 docker + docker compose plugin; $REPO_DIR/.env 已配好
+# 部署路径: $REPO_DIR (默认 /root/linguacraft)
+#
+# 注意:
+# - mongo / redis 容器不会被 recreate (只 up -d --build backend, 其他 service 保留)
+# - 数据卷 mongo_data / redis_data 不动, 数据保留
+# - 前端 dist 通过 host nginx (80 → /var/www/linguacraft) 提供, 不通过 frontend 容器
 
 set -euo pipefail
 
@@ -18,122 +23,126 @@ err()     { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 # ---- 参数 ----
 SKIP_BACKFILL=0
 SKIP_SMOKE=0
-REPO_DIR="${REPO_DIR:-/opt/linguacraft}"
-BACKEND_DIR="$REPO_DIR/backend"
+RECREATE_FRONTEND=0
+REPO_DIR="${REPO_DIR:-/root/linguacraft}"
 FRONTEND_DIR="$REPO_DIR/frontend"
 WEB_ROOT="${WEB_ROOT:-/var/www/linguacraft}"
-SERVICE_NAME="${SERVICE_NAME:-linguacraft-backend}"
 BRANCH="${BRANCH:-main}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-backfill) SKIP_BACKFILL=1; shift ;;
-    --skip-smoke)    SKIP_SMOKE=1;    shift ;;
-    -h|--help)
-      sed -n '2,7p' "$0"; exit 0 ;;
+    --skip-backfill)    SKIP_BACKFILL=1; shift ;;
+    --skip-smoke)       SKIP_SMOKE=1;    shift ;;
+    --recreate-frontend) RECREATE_FRONTEND=1; shift ;;
+    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
     *) err "未知参数: $1 (--help 看用法)" ;;
   esac
 done
 
 # ---- 前置检查 ----
-[[ -d "$REPO_DIR" ]]   || err "仓库目录不存在: $REPO_DIR (设 REPO_DIR 或先 git clone)"
-[[ -d "$BACKEND_DIR" ]] || err "backend/ 不存在, 请确认仓库结构"
+[[ -d "$REPO_DIR" ]]     || err "仓库目录不存在: $REPO_DIR (设 REPO_DIR 或先 git clone)"
+[[ -d "$FRONTEND_DIR" ]] || err "frontend/ 不存在, 请确认仓库结构"
+command -v docker >/dev/null 2>&1 || err "docker 没装"
+docker compose version >/dev/null 2>&1 || err "docker compose plugin 没装 (apt install docker-compose-plugin)"
 
-# .env 缺失时自动从模板拷 (免部署者手敲 cp), 拷完停住让人填 4 个必填
-if [[ ! -f "$BACKEND_DIR/.env" ]]; then
-  if [[ -f "$BACKEND_DIR/.env.production.example" ]]; then
-    info ".env 缺失, 自动从 .env.production.example 拷一份, 填完 4 个必填再重跑"
-    cp "$BACKEND_DIR/.env.production.example" "$BACKEND_DIR/.env"
-    chmod 600 "$BACKEND_DIR/.env"
-    err "已生成 $BACKEND_DIR/.env, 用 nano 填 JWT_SECRET / DEEPSEEK_API_KEY / ALLOWED_ORIGINS / SMTP_*, 然后再跑一次 $0"
-  else
-    err ".env 不存在 + .env.production.example 也不存在, 请 git pull 拿最新代码"
-  fi
+if [[ ! -f "$REPO_DIR/.env" ]]; then
+  err "$REPO_DIR/.env 不存在, docker compose 拿不到环境变量. 从 .env.example 拷一份填好再重跑."
 fi
-command -v node  >/dev/null 2>&1 || err "node 没装"
-command -v npm   >/dev/null 2>&1 || err "npm 没装"
-command -v git   >/dev/null 2>&1 || err "git 没装"
-NODE_MAJOR=$(node -v | sed -E 's/v([0-9]+).*/\1/')
-[[ "$NODE_MAJOR" -ge 20 ]] || warn "node 版本 $(node -v) 低于 20, 部分依赖可能装不上"
-[[ -r "$BACKEND_DIR/.env" ]] || err "backend/.env 不可读 (chmod 600 + 当前用户有读权限)"
 
-# 拉代码前确认环境健康
-pgrep -f "mongod" >/dev/null 2>&1 || warn "mongod 没在跑, 启动前确认 mongodb 已起"
-pgrep -f "redis-server" >/dev/null 2>&1 || warn "redis-server 没在跑, 启动前确认 redis 已起"
+# 拉代码前确认容器在跑 (出问题好回滚)
+if ! docker ps --format '{{.Names}}' | grep -q '^linguacraft-backend$'; then
+  warn "linguacraft-backend 容器当前不在跑, 启动后没有旧版本可回滚"
+fi
 
 # ---- 1. 拉代码 ----
-info "1/6 git pull origin $BRANCH"
+info "1/7 git pull origin $BRANCH"
 cd "$REPO_DIR"
 git fetch origin "$BRANCH" --prune
 git reset --hard "origin/$BRANCH"
 success "代码已同步到 origin/$BRANCH ($(git rev-parse --short HEAD))"
 
-# ---- 2. 装后端依赖 (含 dev, tsc/ts-node 要用) ----
-info "2/6 cd backend && npm ci"
-cd "$BACKEND_DIR"
-npm ci
-success "后端依赖装完"
-
-# ---- 3. 编译后端 + 装前端依赖 + 构建前端 ----
-info "3/6 npm run build (后端) + 前端 build"
-# npm run 自动加 node_modules/.bin 到 PATH, 但 symlink 可能缺, 用 npx 兜底
-npm run build || npx tsc
-success "后端编译完"
-
+# ---- 2. 构建前端 (host 上跑, dist 要 sync 到 host nginx) ----
+info "2/7 cd frontend && npm ci + npm run build"
 cd "$FRONTEND_DIR"
 npm ci
 npm run build
 success "前端 build 完, 产物在 $FRONTEND_DIR/dist/"
 
-# ---- 3.5 部署前端静态到 nginx 目录 ----
-info "3.5 同步前端 dist/ -> $WEB_ROOT"
+# ---- 3. 同步前端到 nginx ----
+info "3/7 同步前端 dist/ -> $WEB_ROOT"
 mkdir -p "$WEB_ROOT"
 rsync -a --delete "$FRONTEND_DIR/dist/" "$WEB_ROOT/"
 success "前端静态已就位"
 
-# ---- 4. 数据回填 (可跳) ----
-if [[ $SKIP_BACKFILL -eq 0 ]]; then
-  info "4/6 backfill-schema-defaults dry-run"
-  cd "$BACKEND_DIR"
-  npx ts-node scripts/backfill-schema-defaults.ts || warn "dry-run 异常, 继续"
+# ---- 4. 重建并启动 backend 容器 (mongo/redis 不动) ----
+info "4/7 cd $REPO_DIR && docker compose up -d --build backend"
+cd "$REPO_DIR"
+docker compose up -d --build backend
+sleep 2
+BACKEND_STATE=$(docker compose ps --format json backend 2>/dev/null | grep -oE '"State":"[^"]+"' | head -1 | cut -d'"' -f4)
+if [[ "$BACKEND_STATE" == "running" ]]; then
+  success "backend 容器已 running"
+else
+  err "backend 启动失败 (state=$BACKEND_STATE), docker compose logs backend 看日志"
+fi
 
-  info "4/6 backfill-schema-defaults --apply"
-  npx ts-node scripts/backfill-schema-defaults.ts --apply
+# ---- 4.5 可选: 重建 frontend 容器 ----
+if [[ $RECREATE_FRONTEND -eq 1 ]]; then
+  info "4.5/7 docker compose up -d --build frontend (--recreate-frontend)"
+  docker compose up -d --build frontend
+  sleep 1
+  success "frontend 容器已重建"
+fi
+
+# ---- 5. 数据回填 (在 backend 容器内执行, scripts/ 已在镜像里) ----
+if [[ $SKIP_BACKFILL -eq 0 ]]; then
+  info "5/7 backfill-schema-defaults dry-run"
+  docker compose exec -T backend npx ts-node scripts/backfill-schema-defaults.ts || warn "dry-run 异常, 继续"
+
+  info "5/7 backfill-schema-defaults --apply"
+  docker compose exec -T backend npx ts-node scripts/backfill-schema-defaults.ts --apply
   success "数据回填完"
 else
-  warn "4/6 数据回填已跳过 (--skip-backfill)"
+  warn "5/7 数据回填已跳过 (--skip-backfill)"
 fi
 
-# ---- 5. 重启后端 ----
-info "5/6 重启后端 (systemd: $SERVICE_NAME)"
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl restart "$SERVICE_NAME"
-  sleep 2
-  if systemctl is-active --quiet "$SERVICE_NAME"; then
-    success "$SERVICE_NAME 已 active"
-  else
-    err "$SERVICE_NAME 启动失败, journalctl -u $SERVICE_NAME -n 50 看日志"
-  fi
-else
-  warn "systemctl 不可用, 假设你用 pm2 / docker 自己起; 后端需要监听 $REPO_DIR/backend/dist/main.js"
-fi
-
-# ---- 6. smoke test (可跳) ----
+# ---- 6. smoke test (inline, 不依赖 smoke-test-prod.sh) ----
 if [[ $SKIP_SMOKE -eq 0 ]]; then
-  info "6/6 bash scripts/smoke-test-prod.sh"
-  cd "$BACKEND_DIR"
-  if bash scripts/smoke-test-prod.sh; then
-    success "smoke 8/8 PASS, PROD READY"
+  info "6/7 smoke test (inline curl)"
+  PASS=0; FAIL=0
+  check() {
+    local name="$1"; shift
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$@")
+    if [[ "$code" =~ ^2 ]]; then
+      echo "  ✅ $name → $code"; PASS=$((PASS+1))
+    elif [[ "$code" == "401" || "$code" == "400" ]]; then
+      echo "  ✅ $name → $code (预期, 业务正常响应)"; PASS=$((PASS+1))
+    else
+      echo "  ❌ $name → $code (期望 2xx/400/401)"; FAIL=$((FAIL+1))
+    fi
+  }
+  check "API health"     http://127.0.0.1:5500/api/health
+  check "Frontend /"     http://127.0.0.1/
+  check "API auth/me"    http://127.0.0.1:5500/api/auth/me
+  check "API learning"   http://127.0.0.1:5500/api/learning/mastery/count
+  check "API stats/me"   http://127.0.0.1:5500/api/stats/me
+  echo
+  if [[ $FAIL -eq 0 ]]; then
+    success "smoke PASS ($PASS/5), PROD READY"
   else
-    err "smoke 有失败, 先看上面输出 (不要 reload nginx / 切流量)"
+    err "smoke FAIL ($PASS pass, $FAIL fail), 先看上面输出 (不要 reload nginx)"
   fi
 else
-  warn "6/6 smoke test 已跳过 (--skip-smoke)"
+  warn "6/7 smoke test 已跳过 (--skip-smoke)"
 fi
 
+# ---- 7. 完成 ----
 echo
 success "✅ 部署完成"
-echo "  - 后端:  systemctl status $SERVICE_NAME"
-echo "  - 日志:  journalctl -u $SERVICE_NAME -f"
-echo "  - 前端:  $WEB_ROOT (nginx reload: sudo nginx -s reload)"
-echo "  - 下次部署: sudo bash $REPO_DIR/scripts/deploy-prod.sh"
+echo "  - 容器状态:  cd $REPO_DIR && docker compose ps"
+echo "  - 后端日志:  cd $REPO_DIR && docker compose logs -f backend"
+echo "  - 前端日志:  cd $REPO_DIR && docker compose logs -f frontend"
+echo "  - 前端静态:  $WEB_ROOT (nginx reload: sudo nginx -s reload)"
+echo "  - 下次部署:  sudo bash $REPO_DIR/scripts/deploy-prod.sh"
+echo "  - 重建 frontend 容器: 加 --recreate-frontend"

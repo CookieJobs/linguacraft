@@ -13,6 +13,7 @@ RUN apk add --no-cache python3 make g++
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --production && apk del python3 make g++
 COPY --from=builder /app/dist ./dist
+COPY backend/scripts ./scripts
 COPY data ./data
 EXPOSE 5500
 CMD ["node", "dist/main.js"]
