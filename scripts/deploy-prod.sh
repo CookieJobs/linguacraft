@@ -94,13 +94,13 @@ if [[ $RECREATE_FRONTEND -eq 1 ]]; then
   success "frontend 容器已重建"
 fi
 
-# ---- 5. 数据回填 (在 backend 容器内执行, scripts/ 已在镜像里) ----
+# ---- 5. 数据回填 (在 backend 容器内执行, 编译产物在镜像里 /app/scripts/) ----
 if [[ $SKIP_BACKFILL -eq 0 ]]; then
   info "5/7 backfill-schema-defaults dry-run"
-  docker compose exec -T backend npx ts-node scripts/backfill-schema-defaults.ts || warn "dry-run 异常, 继续"
+  docker compose exec -T backend node scripts/backfill-schema-defaults.js || warn "dry-run 异常, 继续"
 
   info "5/7 backfill-schema-defaults --apply"
-  docker compose exec -T backend npx ts-node scripts/backfill-schema-defaults.ts --apply
+  docker compose exec -T backend node scripts/backfill-schema-defaults.js --apply
   success "数据回填完"
 else
   warn "5/7 数据回填已跳过 (--skip-backfill)"
