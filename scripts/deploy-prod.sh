@@ -124,9 +124,9 @@ if [[ $SKIP_SMOKE -eq 0 ]]; then
   }
   check "API health"     http://127.0.0.1:5500/api/health
   check "Frontend /"     http://127.0.0.1/
-  check "API auth/me"    http://127.0.0.1:5500/api/auth/me
   check "API learning"   http://127.0.0.1:5500/api/learning/mastery/count
   check "API stats/me"   http://127.0.0.1:5500/api/stats/me
+  check "API admin"      http://127.0.0.1:5500/api/admin/users
   echo
   if [[ $FAIL -eq 0 ]]; then
     success "smoke PASS ($PASS/5), PROD READY"
